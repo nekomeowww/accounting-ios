@@ -13,6 +13,23 @@ enum DebugSeed {
         return calendar.date(from: DateComponents(year: 2026, month: month, day: day, hour: hour, minute: minute))!
     }
 
+    static func reset(_ store: LedgerStore) throws {
+        try store.writer.write { db in
+            for table in ["message", "conversation", "exchangeRate", "journalEntry", "journalTx", "lineConsumer", "expensePayment", "expenseLine", "expense", "transfer", "member", "participant", "ledger"] {
+                try db.execute(sql: "DELETE FROM \(table)")
+            }
+        }
+        try seedIfEmpty(store)
+    }
+
+    static func counts(_ store: LedgerStore) throws -> [(String, Int)] {
+        try store.writer.read { db in
+            try ["ledger", "participant", "expense", "journalEntry", "exchangeRate", "message"].map { table in
+                (table, try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM \(table)") ?? 0)
+            }
+        }
+    }
+
     static func seedIfEmpty(_ store: LedgerStore) throws {
         let hasLedger = try store.writer.read { try Ledger.fetchCount($0) > 0 }
         guard !hasLedger else { return }

@@ -13,6 +13,14 @@ final class LedgerListViewController: UIHostingController<LedgerListView> {
         navigationItem.rightBarButtonItem = UIBarButtonItem(image: UIImage(systemName: "gearshape"), primaryAction: UIAction { [weak self] _ in
             self?.navigationController?.pushViewController(AgentSettingsViewController(), animated: true)
         })
+        #if DEBUG
+        let debug = UIBarButtonItem(image: UIImage(systemName: "ladybug"), primaryAction: UIAction { [weak self] _ in
+            self?.navigationController?.pushViewController(DebugViewController(), animated: true)
+        })
+        debug.accessibilityIdentifier = "debug-open"
+        debug.accessibilityLabel = "Debug"
+        navigationItem.leftBarButtonItem = debug
+        #endif
     }
 
     @available(*, unavailable)

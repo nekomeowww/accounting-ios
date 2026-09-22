@@ -55,6 +55,9 @@ struct AgentSettings: Equatable {
     }
 
     func makeProvider() -> (any AgentProvider)? {
+        #if DEBUG
+        if ScriptedAgentProvider.isEnabled { return ScriptedAgentProvider() }
+        #endif
         guard !apiKey.isEmpty else { return nil }
         switch provider {
         case .anthropic:

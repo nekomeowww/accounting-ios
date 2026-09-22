@@ -36,6 +36,18 @@ axe swipe --start-x 200 --start-y 700 --end-x 200 --end-y 150 --udid $UDID
 xcrun simctl io booted screenshot "$S/activity.png" 2>/dev/null   # then Read the PNG
 ```
 
+## Debug page (Debug builds only)
+
+```bash
+xcrun simctl launch booted dev.innei.Accounting -debug-open                    # land on the Debug page
+xcrun simctl launch booted dev.innei.Accounting -debug-open gallery-proposal   # jump straight to one row
+axe tap --id debug-open --udid $UDID                                           # ladybug button on the ledger list
+```
+
+Row ids (also the accessibility identifiers): `gallery-balance`, `gallery-expense-row`, `gallery-proposal`, `gallery-chat`, `open-activity`, `open-detail`, `open-ledger-settings`, `open-chat`, `open-agent-settings`, `data-reset`. Toggle `mock-agent` switches Chat to the offline scripted provider: a number in the message produces an expense card, "fail" produces an error, anything else streams sample Markdown. Use it instead of a real key when you only need to check UI. `data-reset` wipes and reseeds without reinstalling.
+
+Composer send button has no accessibility label: tap `-x 361 -y 807`; focus the text field with `-x 175 -y 742` (iPhone 17 Pro).
+
 ## Gotchas
 
 | Symptom | Fix |
