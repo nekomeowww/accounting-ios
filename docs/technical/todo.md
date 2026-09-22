@@ -1,6 +1,6 @@
 # 实施 todo（讨论稿）
 
-依据：[技术 Spec v0.1](technical-spec-v0.1.md)。所有实现项均未开始；顺序与范围待讨论确认。
+依据：[技术 Spec v0.1](technical-spec-v0.1.md) 与 [本地数据模型 Spec](../superpowers/specs/2026-09-23-local-schema-design.md)。已完成项按勾选记录；新增 Receipt 工作按 [小票凭证数据模型建议](receipt-data-model.md) 评审后实施。
 每阶段交付可演示闭环，完成相应验证后再扩大范围。
 
 ## M0 — 固化关键决策
@@ -14,6 +14,7 @@
 - [ ] 本地存储实现按 SQLite + GRDB 建议完成技术定稿。
 - [ ] 确认 Exact Split、币种、结算记录、退款与债务展示语义。
 - [ ] 选择首个 AI provider，确定测试票据来源。
+- [ ] 评审 Receipt 独立修订、字段证据、金额组成 / 支付 / 汇总，以及映射到现有 expenseLine / journal 的设计。
 
 完成条件：技术 Spec 将选定项改为 accepted，保留未选方案与原因。
 
@@ -28,7 +29,7 @@
 
 ## M2 — 完整本地账本
 
-- [ ] Money、Ledger、Member、Expense、Allocation 领域模型。
+- [ ] 按已定稿模型完成 Money、Participant / Member、ExpenseLine / LineConsumer / ExpensePayment 与 Journal 的实现和验证。
 - [ ] 数据迁移、事务边界、查询观察、UUID、软删除与 Action Log。
 - [ ] 区分 MemberID、ActorID 与设备上的当前成员偏好，业务实体不依赖云端账号。
 - [ ] 创建账本 / 成员，手工创建和修改 Expense，均分、请客、个人消费。
@@ -46,6 +47,7 @@
 - [ ] 稳定 asset ID，业务数据 / 设备偏好 / 凭据 / AI 处理数据分离，为未来分享保留边界。
 - [ ] Input / ProcessingJob 状态机，中断恢复与显式重试。
 - [ ] Activity 显示待处理票据，详情可查看原图。
+- [ ] 按凭证模型建议追加 localAsset / receipt / receiptPage，支持多页、文件缺失与中断恢复；旧账目迁移不伪造 Receipt。
 
 完成条件：断网拍照或导入后退出 App，重开后票据与任务仍存在。
 
@@ -56,6 +58,9 @@
 - [ ] 类型化 Proposal → Domain 校验 → 原子记账；Items 持久化。
 - [ ] 默认付款人、参与者与均分推断；关键歧义澄清入口。
 - [ ] 重试去重、迟到响应处理、金额与格式错误恢复。
+- [ ] 追加 receiptExtraction / receiptRevision，以及商户、商品、税费、税组、支付、汇总、引用、注释和字段证据表；采用修订一次性提交。
+- [ ] 实现 expenseReceipt / expenseLineReceiptSource：totalOnly 和 reconciledLines 都走现有 Domain / journal，重复识别不能重复入账或静默覆盖用户纠正。
+- [ ] 覆盖已含税不重复计入、套餐不重复合计、小数数量、现金找零、礼品卡支付、后付小费、未知币种、溢出与未识别金额。
 
 完成条件：真实票据可以自动进入 Activity 和余额；失败不丢输入，重试不重复记账。
 
@@ -87,6 +92,7 @@
 - [ ] 一致快照、附件保留、后台生成、进度、取消、磁盘不足与缺失资源处理。
 - [ ] 系统分享面板和文件导出选择器；完成 / 取消反馈及临时文件清理。
 - [ ] 校验 CSV 输出和归档编码解码后业务事实 / 关联一致，覆盖多语言商户与特殊字符。
+- [ ] 归档扩展 Receipt schema 版本与所需修订引用闭包；排除原始响应、字段 rawText 和支付个人标识后仍保持引用可解析。
 
 完成条件：飞行模式下生成 CSV 与账本归档，可保存至本机文件位置并发起系统分享；源账本保持不变，失败不误报成功。归档只宣称可导出，不宣称已提供恢复 UI。
 

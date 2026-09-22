@@ -125,6 +125,8 @@ Domain 提供命令（`createExpense`、`updateExpense`、`deleteExpense`、`rec
 
 ## 5. 迁移计划
 
+Receipt 的详细扩展建议见 [小票凭证数据模型](../../technical/receipt-data-model.md)。该建议沿用本文事件与 journal 结构，提议将下述单个 `expense.receiptId` 升级为记录所采用修订的 `expenseReceipt` 关联；具体迁移在评审后追加，不修改现有 v1。
+
 - `v1`：本文 10 张表。
 - `v2`（M2）：`action`。
 - `v3`（M3）：`receipt`、`input`、`processingJob`，`expense.receiptId`。

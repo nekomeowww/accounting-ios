@@ -3,6 +3,8 @@
 更新日期：2026-09-23。状态：讨论稿，供逐项决策；尚未进入 App 实现。
 产品依据：[Product Spec v0.2](../product/product-spec-v0.2.md)。
 
+阅读顺序：本文是初始讨论基线。已确定并开始实现的账本结构以 [本地数据模型 Spec](../superpowers/specs/2026-09-23-local-schema-design.md) 为准；[小票凭证数据模型](receipt-data-model.md) 提议在其上扩展原始证据、结构化 Receipt 和账目来源映射，仍待评审。
+
 ## 1. 已确认约束
 
 - 全部产品视图使用 UIKit。
@@ -97,6 +99,8 @@ iOS 26 标准 UIKit 控件提供新的系统外观；采用系统组件可以直
 
 ## 6. 持久化模型
 
+本节保留初始候选模型；实际 `participant / member`、逐行分摊与 journal 已在本地数据模型 Spec 中细化。Receipt 表、字段和与账本的关系请参阅 [小票凭证数据模型](receipt-data-model.md)，其中完整 Receipt 保存与当前有效账务分层。
+
 建议核心表：Ledger、Member、Expense、ExpenseParticipant、ExpenseAllocation、ExpenseItem、ItemParticipant、Receipt、Place、Action。
 任务相关表：Input、ProcessingJob；对话消息只作为上下文，不能作为账本事实。
 
@@ -188,6 +192,7 @@ CSV 面向表格阅读与后续分析，提供“消费明细 / 成员分摊 / �
 
 - manifest 保存 formatVersion、exportID、exportedAt、sourceLedgerID、应用版本、附件清单和缺失 / 未包含资源标记。
 - ledger 保存账本、成员、有效 Expense / Items / Participants / Allocations、关联 Place 与 Receipt metadata；未来加入的结算事实必须进入格式。
+- 上述为初始逻辑对象清单；适配当前事件 / journal 模型时，使用实际 expenseLine / lineConsumer / expensePayment / transfer 名称。新增结构化 Receipt 的修订、来源映射及脱敏导出建议见 [凭证模型第 10 节](receipt-data-model.md#10-导出与分享)，导出不能遗留悬空引用。
 - 原始金额以最小单位十进制字符串 + currency + exponent 编码；关联关系使用稳定 UUID。
 - “包含票据原图”建议默认开启；关闭后仍保留 metadata，并明确记录资源未包含。缺失文件不静默忽略，要让用户选择重试或继续生成标注不完整的副本。
 - 当前未完成的票据输入用 pending 标记保留引用，包含原图时一同打包；不导出活跃任务、重试令牌或远端请求状态。
