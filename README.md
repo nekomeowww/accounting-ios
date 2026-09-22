@@ -29,7 +29,10 @@ xcodebuild -project Accounting.xcodeproj -scheme Accounting -destination 'platfo
 
 - [产品 Spec v0.2](docs/product/product-spec-v0.2.md)
 - [技术 Spec v0.1 讨论稿](docs/technical/technical-spec-v0.1.md)
+- [本地数据模型 Spec](docs/superpowers/specs/2026-09-23-local-schema-design.md)
+- [小票凭证数据模型建议](docs/technical/receipt-data-model.md)
 - [分阶段 todo](docs/technical/todo.md)
 - [Local First 选型研究](docs/research/local-first-ios.md)
+- [开源 Expense 项目与表结构研究](docs/research/expense-schema-comparison.md)
 
 技术讨论稿中的建议不代表已确认的技术决策。
