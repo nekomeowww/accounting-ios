@@ -1,0 +1,59 @@
+name: Accounting
+options:
+  bundleIdPrefix: dev.innei
+  deploymentTarget:
+    iOS: "26.0"
+  xcodeVersion: "26.0"
+  createIntermediateGroups: true
+packages:
+  LedgerKit:
+    path: Packages/LedgerKit
+settings:
+  base:
+    SWIFT_VERSION: "6.0"
+    SWIFT_STRICT_CONCURRENCY: complete
+    DEVELOPMENT_TEAM: KAMM5N88X3
+    CODE_SIGN_STYLE: Automatic
+targets:
+  Accounting:
+    type: application
+    platform: iOS
+    sources:
+      - App/Sources
+      - App/Resources
+    dependencies:
+      - package: LedgerKit
+        product: LedgerDomain
+      - package: LedgerKit
+        product: LedgerPersistence
+    info:
+      path: App/Info.plist
+      properties:
+        CFBundleDisplayName: Accounting
+        UILaunchScreen: {}
+        UIApplicationSceneManifest:
+          UIApplicationSupportsMultipleScenes: false
+          UISceneConfigurations:
+            UIWindowSceneSessionRoleApplication:
+              - UISceneConfigurationName: Default
+                UISceneDelegateClassName: $(PRODUCT_MODULE_NAME).SceneDelegate
+        UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait]
+        ITSAppUsesNonExemptEncryption: false
+    settings:
+      base:
+        TARGETED_DEVICE_FAMILY: 1
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
+        GENERATE_INFOPLIST_FILE: false
+schemes:
+  Accounting:
+    build:
+      targets:
+        Accounting: all
+    run:
+      config: Debug
+    test:
+      config: Debug
+      targets:
+        - package: LedgerKit/LedgerDomainTests
+        - package: LedgerKit/LedgerPersistenceTests

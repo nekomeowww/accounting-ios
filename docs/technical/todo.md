@@ -19,10 +19,10 @@
 
 ## M1 — 能运行的原生工程
 
-- [ ] App target：最低 iOS 26.0、设备族 iPhone、UIKit Scene 生命周期。
-- [ ] Swift 6、本地 package、依赖锁定；先以目录组织小模块。
+- [x] App target：最低 iOS 26.0、设备族 iPhone、UIKit Scene 生命周期。
+- [x] Swift 6、本地 package、依赖锁定；先以目录组织小模块。
 - [ ] 账本列表与账本页面导航、Activity / Map 占位、输入栏。
-- [ ] 确认模拟器构建和真机运行路径；补充 README 构建方式。
+- [ ] 确认模拟器构建和真机运行路径；补充 README 构建方式。（模拟器构建与 README 已完成，真机待验证）
 
 完成条件：干净 checkout 可构建，iPhone 上系统导航、输入与返回行为正常。
 

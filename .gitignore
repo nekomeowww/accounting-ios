@@ -7,3 +7,6 @@ xcuserdata/
 .env.*
 !.env.example
 Secrets.xcconfig
+
+*.xcodeproj
+.superpowers/
