@@ -57,7 +57,8 @@
 
 - [x] Keychain 与开发者 AI 设置；实现首个 provider adapter。
 - [ ] 结构化 receipt extraction，保留 raw / normalized / evidence / model version。
-- [ ] 类型化 Proposal → Domain 校验 → 原子记账；Items 持久化。
+- [x] 类型化 Proposal → Domain 校验 → 原子记账（自然语言 → 记账卡片 → 确认，[Agent 记账卡片 Spec](../superpowers/specs/2026-09-23-agent-expense-proposal-design.md)）。
+- [ ] Items 持久化（多行明细）。
 - [ ] 默认付款人、参与者与均分推断；关键歧义澄清入口。
 - [ ] 重试去重、迟到响应处理、金额与格式错误恢复。
 - [ ] 追加 receiptExtraction / receiptRevision，以及商户、商品、税费、税组、支付、汇总、引用、注释和字段证据表；采用修订一次性提交。
@@ -68,7 +69,7 @@
 
 ## M5 — 自然语言改账
 
-- [ ] 最小 Agent Context 与近期 Expense / Action 查询。
+- [x] 最小 Agent Context（成员、当前用户、折算余额、近 20 笔）；Action 查询待 M2。
 - [ ] 修改付款人、参与者、分摊方式与目标 Expense 解析。
 - [ ] 多候选澄清、基于版本提交、Undo 的自然语言调用。
 - [ ] 回执与追问嵌入 Activity，保持手工纠正入口。

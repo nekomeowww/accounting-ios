@@ -1,5 +1,6 @@
 import Foundation
 import GRDB
+import LedgerDomain
 
 public struct Conversation: Hashable, Sendable, Codable, Identifiable, FetchableRecord, PersistableRecord {
     public var id: UUID
@@ -18,6 +19,14 @@ public enum MessageStatus: String, Sendable, Codable {
     case streaming, complete, failed
 }
 
+public enum MessageKind: String, Sendable, Codable {
+    case text, proposal
+}
+
+public enum ProposalState: String, Sendable, Codable {
+    case pending, accepted, dismissed
+}
+
 public struct Message: Hashable, Sendable, Codable, Identifiable, FetchableRecord, PersistableRecord {
     public var id: UUID
     public var conversationId: UUID
@@ -27,6 +36,10 @@ public struct Message: Hashable, Sendable, Codable, Identifiable, FetchableRecor
     public var error: String?
     public var createdAt: Date
     public var updatedAt: Date
+    public var kind: MessageKind = .text
+    public var payload: String?
+    public var proposalState: ProposalState?
+    public var expenseId: UUID?
 
     public static func databaseUUIDEncodingStrategy(for column: String) -> DatabaseUUIDEncodingStrategy { .uppercaseString }
 }
@@ -65,6 +78,50 @@ extension LedgerStore {
     public func updateAssistantTurn(messageId: UUID, text: String, status: MessageStatus, error: String? = nil) throws {
         try writer.write { db in
             try db.execute(sql: "UPDATE message SET text = ?, status = ?, error = ?, updatedAt = ? WHERE id = ?", arguments: [text, status.rawValue, error, Date(), messageId.uuidString])
+        }
+    }
+
+    public func appendProposal(conversationId: UUID, payload: String) throws {
+        let now = Date()
+        let proposal = Message(
+            id: UUID(), conversationId: conversationId, role: .assistant, text: "", status: .complete,
+            createdAt: now, updatedAt: now, kind: .proposal, payload: payload, proposalState: .pending
+        )
+        try writer.write { try proposal.insert($0) }
+    }
+
+    public func discardEmptyTurn(messageId: UUID) throws {
+        try writer.write { db in
+            try db.execute(sql: "DELETE FROM message WHERE id = ? AND kind = 'text' AND text = ''", arguments: [messageId.uuidString])
+        }
+    }
+
+    @discardableResult
+    public func acceptProposal(messageId: UUID, ledgerId: UUID, timeZone: TimeZone = .current) throws -> Expense {
+        try writer.write { db in
+            guard let message = try Message.fetchOne(db, key: messageId.uuidString), message.kind == .proposal,
+                  message.proposalState == .pending, let payload = message.payload else { throw ProposalError.notPending }
+            let participants = try Participant
+                .filter(Column("ledgerId") == ledgerId.uuidString && Column("deletedAt") == nil)
+                .order(Column("createdAt"))
+                .fetchAll(db)
+                .map { (id: $0.id, name: $0.name) }
+            let draft = try ExpenseProposal.decode(payload).draft(ledgerId: ledgerId, participants: participants, timeZone: timeZone)
+            let expense = try Self.insertExpense(db, draft, actorId: actorId)
+            try db.execute(
+                sql: "UPDATE message SET proposalState = 'accepted', expenseId = ?, updatedAt = ? WHERE id = ?",
+                arguments: [expense.id.uuidString, Date(), messageId.uuidString]
+            )
+            return expense
+        }
+    }
+
+    public func dismissProposal(messageId: UUID) throws {
+        try writer.write { db in
+            try db.execute(
+                sql: "UPDATE message SET proposalState = 'dismissed', updatedAt = ? WHERE id = ? AND proposalState = 'pending'",
+                arguments: [Date(), messageId.uuidString]
+            )
         }
     }
 

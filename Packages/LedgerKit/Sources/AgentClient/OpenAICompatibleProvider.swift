@@ -12,29 +12,54 @@ public struct OpenAICompatibleProvider: AgentProvider {
         self.model = model
     }
 
-    public func stream(system: String, turns: [ChatTurn]) -> AsyncThrowingStream<String, Error> {
+    public func stream(system: String, turns: [ChatTurn], tools: [ToolSpec]) -> AsyncThrowingStream<AgentEvent, Error> {
         var request = URLRequest(url: baseURL.appending(path: "chat/completions"))
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "content-type")
         request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "authorization")
-        let messages = [["role": "system", "content": system]] + turns.map { ["role": $0.role.rawValue, "content": $0.text] }
-        request.httpBody = try? JSONSerialization.data(withJSONObject: [
+        let messages = [["role": "system", "content": system]] + ChatTurn.merged(turns).map { ["role": $0.role.rawValue, "content": $0.text] }
+        var body: [String: Any] = [
             "model": model,
             "stream": true,
             "messages": messages,
-        ] as [String: Any])
-        return HTTPStreaming.stream(request: request, textDelta: Self.step)
+        ]
+        if !tools.isEmpty {
+            body["tools"] = tools.map { ["type": "function", "function": ["name": $0.name, "description": $0.description, "parameters": $0.schemaObject]] }
+        }
+        request.httpBody = try? JSONSerialization.data(withJSONObject: body)
+        return HTTPStreaming.stream(request: request, decoder: Decoder.self)
     }
 
-    static func step(_ event: SSEEvent) throws -> StreamStep {
-        if event.data == "[DONE]" { return .done }
-        guard let json = try JSONSerialization.jsonObject(with: Data(event.data.utf8)) as? [String: Any] else { throw AgentError.invalidResponse }
-        if let error = json["error"] as? [String: Any] {
-            throw AgentError.http(status: 0, body: error["message"] as? String ?? event.data)
+    struct Decoder: StreamDecoder {
+        private var pending: [Int: ToolCall] = [:]
+
+        mutating func decode(_ event: SSEEvent) throws -> StreamStep {
+            if event.data == "[DONE]" { return .done }
+            guard let json = try JSONSerialization.jsonObject(with: Data(event.data.utf8)) as? [String: Any] else { throw AgentError.invalidResponse }
+            if let error = json["error"] as? [String: Any] {
+                throw AgentError.http(status: 0, body: error["message"] as? String ?? event.data)
+            }
+            guard let choice = (json["choices"] as? [[String: Any]])?.first else { return .emit([]) }
+            var events: [AgentEvent] = []
+            if let delta = choice["delta"] as? [String: Any] {
+                if let text = delta["content"] as? String, !text.isEmpty { events.append(.text(text)) }
+                for fragment in delta["tool_calls"] as? [[String: Any]] ?? [] {
+                    let index = fragment["index"] as? Int ?? 0
+                    var call = pending[index] ?? ToolCall(id: "", name: "", arguments: "")
+                    if let id = fragment["id"] as? String, !id.isEmpty { call.id = id }
+                    let function = fragment["function"] as? [String: Any]
+                    if let name = function?["name"] as? String, !name.isEmpty { call.name = name }
+                    call.arguments += function?["arguments"] as? String ?? ""
+                    pending[index] = call
+                }
+            }
+            if choice["finish_reason"] is String { events += finish() }
+            return .emit(events)
         }
-        guard let choice = (json["choices"] as? [[String: Any]])?.first,
-              let delta = choice["delta"] as? [String: Any],
-              let text = delta["content"] as? String, !text.isEmpty else { return .ignore }
-        return .text(text)
+
+        mutating func finish() -> [AgentEvent] {
+            defer { pending.removeAll() }
+            return pending.keys.sorted().compactMap { pending[$0] }.filter { !$0.name.isEmpty }.map { .toolCall($0) }
+        }
     }
 }

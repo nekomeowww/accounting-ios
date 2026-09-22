@@ -50,19 +50,21 @@ public final class LedgerStore: Sendable {
 
     @discardableResult
     public func createExpense(_ draft: ExpenseDraft) throws -> Expense {
-        try writer.write { db in
-            let participantIds = try Participant
-                .filter(Column("ledgerId") == draft.ledgerId.uuidString && Column("deletedAt") == nil)
-                .fetchAll(db)
-                .map(\.id)
-            let aggregate = try ExpenseBuilder.build(draft, ledgerParticipantIds: Set(participantIds), actorId: actorId)
-            try aggregate.expense.insert(db)
-            for line in aggregate.lines { try line.insert(db) }
-            for consumer in aggregate.consumers { try consumer.insert(db) }
-            for payment in aggregate.payments { try payment.insert(db) }
-            try aggregate.journalTx.insert(db)
-            for entry in aggregate.entries { try entry.insert(db) }
-            return aggregate.expense
-        }
+        try writer.write { try Self.insertExpense($0, draft, actorId: actorId) }
+    }
+
+    static func insertExpense(_ db: Database, _ draft: ExpenseDraft, actorId: UUID) throws -> Expense {
+        let participantIds = try Participant
+            .filter(Column("ledgerId") == draft.ledgerId.uuidString && Column("deletedAt") == nil)
+            .fetchAll(db)
+            .map(\.id)
+        let aggregate = try ExpenseBuilder.build(draft, ledgerParticipantIds: Set(participantIds), actorId: actorId)
+        try aggregate.expense.insert(db)
+        for line in aggregate.lines { try line.insert(db) }
+        for consumer in aggregate.consumers { try consumer.insert(db) }
+        for payment in aggregate.payments { try payment.insert(db) }
+        try aggregate.journalTx.insert(db)
+        for entry in aggregate.entries { try entry.insert(db) }
+        return aggregate.expense
     }
 }

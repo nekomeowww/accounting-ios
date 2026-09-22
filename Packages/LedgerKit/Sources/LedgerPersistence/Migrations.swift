@@ -136,6 +136,14 @@ enum Migrations {
                 t.primaryKey(["ledgerId", "currency"])
             }
         }
+        migrator.registerMigration("v4") { db in
+            try db.alter(table: "message") { t in
+                t.add(column: "kind", .text).notNull().defaults(to: "text")
+                t.add(column: "payload", .text)
+                t.add(column: "proposalState", .text)
+                t.add(column: "expenseId", .text).references("expense", onDelete: .setNull)
+            }
+        }
         return migrator
     }
 

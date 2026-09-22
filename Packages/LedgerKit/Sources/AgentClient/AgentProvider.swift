@@ -12,15 +12,69 @@ public struct ChatTurn: Hashable, Sendable {
         self.role = role
         self.text = text
     }
+
+    public static func merged(_ turns: [ChatTurn]) -> [ChatTurn] {
+        turns.reduce(into: []) { result, turn in
+            if result.last?.role == turn.role {
+                result[result.count - 1].text += "\n\n" + turn.text
+            } else {
+                result.append(turn)
+            }
+        }
+    }
+}
+
+public struct ToolSpec: Sendable {
+    public var name: String
+    public var description: String
+    public var inputSchema: String
+
+    public init(name: String, description: String, inputSchema: String) {
+        self.name = name
+        self.description = description
+        self.inputSchema = inputSchema
+    }
+
+    var schemaObject: Any {
+        (try? JSONSerialization.jsonObject(with: Data(inputSchema.utf8))) ?? [String: Any]()
+    }
+}
+
+public struct ToolCall: Hashable, Sendable {
+    public var id: String
+    public var name: String
+    public var arguments: String
+
+    public init(id: String, name: String, arguments: String) {
+        self.id = id
+        self.name = name
+        self.arguments = arguments
+    }
+}
+
+public enum AgentEvent: Hashable, Sendable {
+    case text(String)
+    case toolCall(ToolCall)
 }
 
 public protocol AgentProvider: Sendable {
-    func stream(system: String, turns: [ChatTurn]) -> AsyncThrowingStream<String, Error>
+    func stream(system: String, turns: [ChatTurn], tools: [ToolSpec]) -> AsyncThrowingStream<AgentEvent, Error>
 }
 
 public enum AgentError: Error, Sendable {
     case http(status: Int, body: String)
     case invalidResponse
+}
+
+enum StreamStep: Equatable {
+    case emit([AgentEvent])
+    case done
+}
+
+protocol StreamDecoder: Sendable {
+    init()
+    mutating func decode(_ event: SSEEvent) throws -> StreamStep
+    mutating func finish() -> [AgentEvent]
 }
 
 enum HTTPStreaming {
@@ -35,23 +89,33 @@ enum HTTPStreaming {
         return bytes
     }
 
-    static func stream(request: URLRequest, textDelta: @escaping @Sendable (SSEEvent) throws -> StreamStep) -> AsyncThrowingStream<String, Error> {
+    static func stream<Decoder: StreamDecoder>(request: URLRequest, decoder _: Decoder.Type) -> AsyncThrowingStream<AgentEvent, Error> {
         AsyncThrowingStream { continuation in
             let task = Task {
                 do {
                     let bytes = try await lines(for: request)
                     var parser = SSEParser()
                     var splitter = LineSplitter()
-                    for try await byte in bytes {
-                        guard let line = splitter.feed(byte), let event = parser.feed(line) else { continue }
-                        switch try textDelta(event) {
-                        case .text(let text): continuation.yield(text)
-                        case .ignore: continue
-                        case .done: continuation.finish(); return
+                    var decoder = Decoder()
+                    func handle(_ event: SSEEvent) throws -> Bool {
+                        switch try decoder.decode(event) {
+                        case .emit(let events):
+                            events.forEach { continuation.yield($0) }
+                            return false
+                        case .done:
+                            return true
                         }
                     }
-                    if let line = splitter.flush(), let event = parser.feed(line), case .text(let text) = try textDelta(event) { continuation.yield(text) }
-                    if let event = parser.flush(), case .text(let text) = try textDelta(event) { continuation.yield(text) }
+                    var finished = false
+                    for try await byte in bytes {
+                        guard let line = splitter.feed(byte), let event = parser.feed(line) else { continue }
+                        if try handle(event) { finished = true; break }
+                    }
+                    if !finished {
+                        if let line = splitter.flush(), let event = parser.feed(line) { _ = try handle(event) }
+                        if let event = parser.flush() { _ = try handle(event) }
+                    }
+                    decoder.finish().forEach { continuation.yield($0) }
                     continuation.finish()
                 } catch {
                     continuation.finish(throwing: error)
@@ -60,12 +124,6 @@ enum HTTPStreaming {
             continuation.onTermination = { _ in task.cancel() }
         }
     }
-}
-
-enum StreamStep {
-    case text(String)
-    case ignore
-    case done
 }
 
 struct LineSplitter {

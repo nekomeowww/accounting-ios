@@ -13,23 +13,48 @@ import Testing
     #expect(parser.flush() == SSEEvent(event: nil, data: "tail"))
 }
 
+private func event(_ data: String) -> SSEEvent { SSEEvent(event: nil, data: data) }
+
 @Test func anthropicMapsTextDeltasAndStops() throws {
-    let delta = SSEEvent(event: "content_block_delta", data: #"{"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"Hi"}}"#)
-    guard case .text("Hi") = try AnthropicProvider.step(delta) else { Issue.record("expected text"); return }
-    let thinking = SSEEvent(event: "content_block_delta", data: #"{"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"…"}}"#)
-    guard case .ignore = try AnthropicProvider.step(thinking) else { Issue.record("expected ignore"); return }
-    guard case .done = try AnthropicProvider.step(SSEEvent(event: "message_stop", data: #"{"type":"message_stop"}"#)) else { Issue.record("expected done"); return }
+    var decoder = AnthropicProvider.Decoder()
+    #expect(try decoder.decode(event(#"{"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"Hi"}}"#)) == .emit([.text("Hi")]))
+    #expect(try decoder.decode(event(#"{"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"…"}}"#)) == .emit([]))
+    #expect(try decoder.decode(event(#"{"type":"message_stop"}"#)) == .done)
     #expect(throws: AgentError.self) {
-        try AnthropicProvider.step(SSEEvent(event: "error", data: #"{"type":"error","error":{"type":"overloaded_error","message":"Overloaded"}}"#))
+        try decoder.decode(event(#"{"type":"error","error":{"type":"overloaded_error","message":"Overloaded"}}"#))
     }
 }
 
+@Test func anthropicAccumulatesToolInput() throws {
+    var decoder = AnthropicProvider.Decoder()
+    _ = try decoder.decode(event(#"{"type":"content_block_start","index":1,"content_block":{"type":"tool_use","id":"toolu_1","name":"propose_expense","input":{}}}"#))
+    _ = try decoder.decode(event(#"{"type":"content_block_delta","index":1,"delta":{"type":"input_json_delta","partial_json":"{\"amount\": "}}"#))
+    _ = try decoder.decode(event(#"{"type":"content_block_delta","index":1,"delta":{"type":"input_json_delta","partial_json":"\"9700\"}"}}"#))
+    let step = try decoder.decode(event(#"{"type":"content_block_stop","index":1}"#))
+    #expect(step == .emit([.toolCall(ToolCall(id: "toolu_1", name: "propose_expense", arguments: #"{"amount": "9700"}"#))]))
+    #expect(try decoder.decode(event(#"{"type":"content_block_stop","index":0}"#)) == .emit([]))
+}
+
 @Test func openAIMapsDeltaContentAndDone() throws {
-    let delta = SSEEvent(event: nil, data: #"{"choices":[{"delta":{"content":"Hey"},"index":0}]}"#)
-    guard case .text("Hey") = try OpenAICompatibleProvider.step(delta) else { Issue.record("expected text"); return }
-    let roleOnly = SSEEvent(event: nil, data: #"{"choices":[{"delta":{"role":"assistant"},"index":0}]}"#)
-    guard case .ignore = try OpenAICompatibleProvider.step(roleOnly) else { Issue.record("expected ignore"); return }
-    guard case .done = try OpenAICompatibleProvider.step(SSEEvent(event: nil, data: "[DONE]")) else { Issue.record("expected done"); return }
+    var decoder = OpenAICompatibleProvider.Decoder()
+    #expect(try decoder.decode(event(#"{"choices":[{"delta":{"content":"Hey"},"index":0}]}"#)) == .emit([.text("Hey")]))
+    #expect(try decoder.decode(event(#"{"choices":[{"delta":{"role":"assistant"},"index":0,"finish_reason":null}]}"#)) == .emit([]))
+    #expect(try decoder.decode(event("[DONE]")) == .done)
+}
+
+@Test func openAIAccumulatesToolCallsUntilFinish() throws {
+    var decoder = OpenAICompatibleProvider.Decoder()
+    _ = try decoder.decode(event(#"{"choices":[{"delta":{"tool_calls":[{"index":0,"id":"call_1","type":"function","function":{"name":"propose_expense","arguments":""}}]}}]}"#))
+    _ = try decoder.decode(event(#"{"choices":[{"delta":{"tool_calls":[{"index":0,"function":{"arguments":"{\"amount\":"}}]}}]}"#))
+    _ = try decoder.decode(event(#"{"choices":[{"delta":{"tool_calls":[{"index":0,"function":{"arguments":"\"12.50\"}"}}]}}]}"#))
+    let step = try decoder.decode(event(#"{"choices":[{"delta":{},"finish_reason":"tool_calls"}]}"#))
+    #expect(step == .emit([.toolCall(ToolCall(id: "call_1", name: "propose_expense", arguments: #"{"amount":"12.50"}"#))]))
+    #expect(decoder.finish().isEmpty)
+}
+
+@Test func mergesConsecutiveSameRoleTurns() {
+    let merged = ChatTurn.merged([ChatTurn(role: .user, text: "a"), ChatTurn(role: .assistant, text: "b"), ChatTurn(role: .assistant, text: "c")])
+    #expect(merged == [ChatTurn(role: .user, text: "a"), ChatTurn(role: .assistant, text: "b\n\nc")])
 }
 
 @Test func lineSplitterKeepsBlankLinesAndStripsCR() {

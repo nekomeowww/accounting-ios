@@ -95,6 +95,18 @@ final class ChatViewController: UIViewController {
             cell.configure(text: streaming ? session.streamingText : message.text, streaming: streaming)
             cell.onHeightChange = { [weak self] in self?.relayoutStreamingCell() }
         }
+        let proposal = UICollectionView.CellRegistration<UICollectionViewListCell, Message> { [unowned self] cell, _, message in
+            let preview = ProposalPreview.make(payload: message.payload, ledger: session.ledger, store: AppServices.store)
+            cell.contentConfiguration = UIHostingConfiguration {
+                ProposalCardView(
+                    state: message.proposalState ?? .dismissed,
+                    preview: preview,
+                    onAccept: { [weak self] in self?.accept(message) },
+                    onDismiss: { [weak self] in self?.session.dismiss(message) },
+                    onOpen: { [weak self] in self?.openExpense(message.expenseId) }
+                )
+            }
+        }
         let failed = UICollectionView.CellRegistration<UICollectionViewListCell, Message> { [unowned self] cell, _, message in
             cell.contentConfiguration = UIHostingConfiguration {
                 FailedMessageView(text: message.text, error: message.error ?? "失败") { [weak self] in
@@ -104,6 +116,9 @@ final class ChatViewController: UIViewController {
         }
         dataSource = UICollectionViewDiffableDataSource(collectionView: collectionView) { [unowned self] collectionView, indexPath, id in
             guard let message = messages[id] else { return UICollectionViewCell() }
+            if message.kind == .proposal {
+                return collectionView.dequeueConfiguredReusableCell(using: proposal, for: indexPath, item: message)
+            }
             switch (message.role, message.status) {
             case (.user, _):
                 return collectionView.dequeueConfiguredReusableCell(using: user, for: indexPath, item: message)
@@ -158,11 +173,31 @@ final class ChatViewController: UIViewController {
     }
 
     private func cellKind(_ message: Message) -> Int {
-        switch (message.role, message.status) {
+        if message.kind == .proposal { return 3 }
+        return switch (message.role, message.status) {
         case (.user, _): 0
         case (.assistant, .failed): 1
         case (.assistant, _): 2
         }
+    }
+
+    private func accept(_ message: Message) {
+        do {
+            try session.accept(message)
+        } catch {
+            let alert = UIAlertController(title: "记账失败", message: error.localizedDescription, preferredStyle: .alert)
+            alert.addAction(UIAlertAction(title: "好", style: .default))
+            present(alert, animated: true)
+        }
+    }
+
+    private func openExpense(_ expenseId: UUID?) {
+        guard let expenseId else { return }
+        let store = AppServices.store
+        let me = try? store.writer.read { db in
+            try Member.filter(Column("ledgerId") == session.ledger.id.uuidString && Column("actorId") == store.actorId.uuidString).fetchOne(db)?.participantId
+        }
+        navigationController?.pushViewController(ExpenseDetailViewController(expenseId: expenseId, myParticipantId: me), animated: true)
     }
 
     private func relayoutStreamingCell() {
