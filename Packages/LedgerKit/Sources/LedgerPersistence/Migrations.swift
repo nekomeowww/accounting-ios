@@ -102,6 +102,25 @@ enum Migrations {
             try db.create(indexOn: "journalEntry", columns: ["participantId", "currency"])
             try db.create(indexOn: "expense", columns: ["ledgerId", "occurredAt"])
         }
+        migrator.registerMigration("v2") { db in
+            try db.create(table: "conversation") { t in
+                t.primaryKey("id", .text)
+                t.belongsTo("ledger", onDelete: .cascade).notNull()
+                t.column("createdAt", .datetime).notNull()
+                t.column("updatedAt", .datetime).notNull()
+            }
+            try db.create(table: "message") { t in
+                t.primaryKey("id", .text)
+                t.belongsTo("conversation", onDelete: .cascade).notNull()
+                t.column("role", .text).notNull()
+                t.column("text", .text).notNull()
+                t.column("status", .text).notNull()
+                t.column("error", .text)
+                t.column("createdAt", .datetime).notNull()
+                t.column("updatedAt", .datetime).notNull()
+            }
+            try db.create(indexOn: "message", columns: ["conversationId", "createdAt"])
+        }
         return migrator
     }
 

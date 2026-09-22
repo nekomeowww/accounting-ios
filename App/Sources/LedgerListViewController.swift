@@ -10,6 +10,9 @@ final class LedgerListViewController: UIHostingController<LedgerListView> {
         super.init(rootView: LedgerListView(ledgers: [], onSelect: { _ in }))
         title = "账本"
         navigationItem.largeTitleDisplayMode = .always
+        navigationItem.rightBarButtonItem = UIBarButtonItem(image: UIImage(systemName: "gearshape"), primaryAction: UIAction { [weak self] _ in
+            self?.navigationController?.pushViewController(AgentSettingsViewController(), animated: true)
+        })
     }
 
     @available(*, unavailable)

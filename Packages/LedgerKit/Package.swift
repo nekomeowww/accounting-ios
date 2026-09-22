@@ -7,6 +7,7 @@ let package = Package(
     products: [
         .library(name: "LedgerDomain", targets: ["LedgerDomain"]),
         .library(name: "LedgerPersistence", targets: ["LedgerPersistence"]),
+        .library(name: "AgentClient", targets: ["AgentClient"]),
     ],
     dependencies: [
         .package(url: "https://github.com/groue/GRDB.swift.git", from: "7.11.1"),
@@ -20,7 +21,9 @@ let package = Package(
                 .product(name: "GRDB", package: "GRDB.swift"),
             ]
         ),
+        .target(name: "AgentClient"),
         .testTarget(name: "LedgerDomainTests", dependencies: ["LedgerDomain"]),
         .testTarget(name: "LedgerPersistenceTests", dependencies: ["LedgerPersistence"]),
+        .testTarget(name: "AgentClientTests", dependencies: ["AgentClient"]),
     ]
 )

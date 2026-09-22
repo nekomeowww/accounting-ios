@@ -22,6 +22,7 @@ final class ActivityViewController: UIViewController {
     private var observations: [AnyDatabaseCancellable] = []
     private var collectionView: UICollectionView!
     private var dataSource: UICollectionViewDiffableDataSource<Section, Item>!
+    private let askButton = UIButton(configuration: .prominentGlass())
 
     init(ledger: Ledger) {
         self.ledger = ledger
@@ -48,6 +49,27 @@ final class ActivityViewController: UIViewController {
         collectionView = UICollectionView(frame: view.bounds, collectionViewLayout: layout)
         collectionView.autoresizingMask = [.flexibleWidth, .flexibleHeight]
         view.addSubview(collectionView)
+
+        askButton.configuration?.title = "Ask Agent…"
+        askButton.configuration?.image = UIImage(systemName: "sparkles")
+        askButton.configuration?.imagePadding = 8
+        askButton.configuration?.cornerStyle = .capsule
+        askButton.configuration?.contentInsets = NSDirectionalEdgeInsets(top: 14, leading: 20, bottom: 14, trailing: 20)
+        askButton.translatesAutoresizingMaskIntoConstraints = false
+        askButton.addAction(UIAction { [weak self] _ in self?.openChat() }, for: .primaryActionTriggered)
+        view.addSubview(askButton)
+        NSLayoutConstraint.activate([
+            askButton.leadingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.leadingAnchor, constant: 16),
+            askButton.trailingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.trailingAnchor, constant: -16),
+            askButton.bottomAnchor.constraint(equalTo: view.safeAreaLayoutGuide.bottomAnchor, constant: -8),
+        ])
+        collectionView.contentInset.bottom = 72
+        collectionView.verticalScrollIndicatorInsets.bottom = 72
+    }
+
+    private func openChat() {
+        guard let chat = try? ChatViewController(ledger: ledger) else { return }
+        navigationController?.pushViewController(chat, animated: true)
     }
 
     private func configureDataSource() {

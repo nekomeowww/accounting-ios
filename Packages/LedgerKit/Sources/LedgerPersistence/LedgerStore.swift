@@ -10,6 +10,7 @@ public final class LedgerStore: Sendable {
         self.writer = writer
         self.actorId = actorId
         try Migrations.migrator.migrate(writer)
+        try writer.write { try Self.failInterruptedStreams($0) }
     }
 
     public static func onDisk(at url: URL, actorId: UUID) throws -> LedgerStore {
