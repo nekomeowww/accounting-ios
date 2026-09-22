@@ -121,6 +121,21 @@ enum Migrations {
             }
             try db.create(indexOn: "message", columns: ["conversationId", "createdAt"])
         }
+        migrator.registerMigration("v3") { db in
+            try db.alter(table: "ledger") { t in
+                t.add(column: "settlementCurrency", .text).notNull().defaults(to: "")
+            }
+            try db.execute(sql: "UPDATE ledger SET settlementCurrency = defaultCurrency")
+            try db.create(table: "exchangeRate") { t in
+                t.belongsTo("ledger", onDelete: .cascade).notNull()
+                t.column("currency", .text).notNull()
+                t.column("rate", .text).notNull()
+                t.column("source", .text).notNull()
+                t.column("asOf", .text)
+                t.column("updatedAt", .datetime).notNull()
+                t.primaryKey(["ledgerId", "currency"])
+            }
+        }
         return migrator
     }
 

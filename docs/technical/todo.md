@@ -11,9 +11,10 @@
 - [x] 确认开发期 BYOK。
 - [x] 确认 V1 加入 Export As / Save As，本地生成文件。
 - [x] 确认先做本地持久化 / 本地计算，CRDT、同步实验和服务器后置。
-- [ ] 本地存储实现按 SQLite + GRDB 建议完成技术定稿。
-- [ ] 确认 Exact Split、币种、结算记录、退款与债务展示语义。
-- [ ] 选择首个 AI provider，确定测试票据来源。
+- [x] 本地存储实现按 SQLite + GRDB 建议完成技术定稿（[本地数据模型 Spec](../superpowers/specs/2026-09-23-local-schema-design.md)）。
+- [x] 币种：账本结算币种 + 手动汇率统一折算，按钮手动拉取（[结算币种 Spec](../superpowers/specs/2026-09-23-settlement-currency-design.md)）。
+- [ ] 确认 Exact Split、结算记录、退款与债务展示语义。
+- [x] AI provider：BYOK，Anthropic + OpenAI 兼容（[Agent Chat Spec](../superpowers/specs/2026-09-23-agent-chat-design.md)）；测试票据来源：`~/trips` 真实旅行账本。
 - [ ] 评审 Receipt 独立修订、字段证据、金额组成 / 支付 / 汇总，以及映射到现有 expenseLine / journal 的设计。
 
 完成条件：技术 Spec 将选定项改为 accepted，保留未选方案与原因。
@@ -22,19 +23,20 @@
 
 - [x] App target：最低 iOS 26.0、设备族 iPhone、UIKit Scene 生命周期。
 - [x] Swift 6、本地 package、依赖锁定；先以目录组织小模块。
-- [ ] 账本列表与账本页面导航、Activity / Map 占位、输入栏。
+- [x] 账本列表与账本页面导航、Activity、Agent 输入栏（Map 占位未做）。
 - [ ] 确认模拟器构建和真机运行路径；补充 README 构建方式。（模拟器构建与 README 已完成，真机待验证）
 
 完成条件：干净 checkout 可构建，iPhone 上系统导航、输入与返回行为正常。
 
 ## M2 — 完整本地账本
 
-- [ ] 按已定稿模型完成 Money、Participant / Member、ExpenseLine / LineConsumer / ExpensePayment 与 Journal 的实现和验证。
+- [x] 按已定稿模型完成 Money、Participant / Member、ExpenseLine / LineConsumer / ExpensePayment 与 Journal 的实现和验证。
 - [ ] 数据迁移、事务边界、查询观察、UUID、软删除与 Action Log。
 - [ ] 区分 MemberID、ActorID 与设备上的当前成员偏好，业务实体不依赖云端账号。
 - [ ] 创建账本 / 成员，手工创建和修改 Expense，均分、请客、个人消费。
 - [ ] 按 D2 决议加入 Exact Split。
-- [ ] Balance Engine 与债务展示；按 D3 决议安排结算记录。
+- [x] Balance Engine：按币种 journal 净额 → 结算币种折算；golden test 对齐 trips 表格。
+- [ ] 债务展示（谁转给谁）；按 D3 决议安排结算记录。
 - [ ] 持久化 Undo 与命令幂等；修改目标的版本校验。
 - [ ] 完成领域不变量、事务失败和重启恢复验证。
 
@@ -53,7 +55,7 @@
 
 ## M4 — Receipt → Expense
 
-- [ ] Keychain 与开发者 AI 设置；实现首个 provider adapter。
+- [x] Keychain 与开发者 AI 设置；实现首个 provider adapter。
 - [ ] 结构化 receipt extraction，保留 raw / normalized / evidence / model version。
 - [ ] 类型化 Proposal → Domain 校验 → 原子记账；Items 持久化。
 - [ ] 默认付款人、参与者与均分推断；关键歧义澄清入口。

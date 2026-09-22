@@ -16,7 +16,7 @@ enum DebugSeed {
     static func seedIfEmpty(_ store: LedgerStore) throws {
         let hasLedger = try store.writer.read { try Ledger.fetchCount($0) > 0 }
         guard !hasLedger else { return }
-        let (ledger, innei) = try store.createLedger(name: "日本旅行 2026.09", currency: "JPY", myName: "innei")
+        let (ledger, innei) = try store.createLedger(name: "日本旅行 2026.09", currency: "JPY", settlementCurrency: "CNY", myName: "innei")
         let whitewater = try store.addParticipant(ledgerId: ledger.id, name: "whitewater")
         let neko = try store.addParticipant(ledgerId: ledger.id, name: "neko")
         let rizumu = try store.addParticipant(ledgerId: ledger.id, name: "rizumu")
@@ -78,6 +78,7 @@ enum DebugSeed {
                 payments: [PaymentDraft(row.payer.id, amountMinor: row.amount, method: row.method)]
             ))
         }
+        try store.setRates(ledgerId: ledger.id, ["USD": Decimal(string: "6.71")!, "JPY": Decimal(string: "0.043")!], source: .manual)
     }
 }
 #endif

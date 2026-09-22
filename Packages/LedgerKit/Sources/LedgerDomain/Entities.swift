@@ -5,6 +5,7 @@ public struct Ledger: Hashable, Sendable, Codable, Identifiable {
     public var name: String
     public var type: String
     public var defaultCurrency: String
+    public var settlementCurrency: String
     public var createdAt: Date
     public var updatedAt: Date
     public var deletedAt: Date?
@@ -12,17 +13,40 @@ public struct Ledger: Hashable, Sendable, Codable, Identifiable {
     public var createdBy: UUID
     public var updatedBy: UUID
 
-    public init(id: UUID, name: String, type: String, defaultCurrency: String, createdAt: Date, updatedAt: Date, deletedAt: Date? = nil, version: Int64, createdBy: UUID, updatedBy: UUID) {
+    public init(id: UUID, name: String, type: String, defaultCurrency: String, settlementCurrency: String, createdAt: Date, updatedAt: Date, deletedAt: Date? = nil, version: Int64, createdBy: UUID, updatedBy: UUID) {
         self.id = id
         self.name = name
         self.type = type
         self.defaultCurrency = defaultCurrency
+        self.settlementCurrency = settlementCurrency
         self.createdAt = createdAt
         self.updatedAt = updatedAt
         self.deletedAt = deletedAt
         self.version = version
         self.createdBy = createdBy
         self.updatedBy = updatedBy
+    }
+}
+
+public enum RateSource: String, Sendable, Codable {
+    case manual, fetched
+}
+
+public struct ExchangeRate: Hashable, Sendable, Codable {
+    public var ledgerId: UUID
+    public var currency: String
+    public var rate: Decimal
+    public var source: RateSource
+    public var asOf: String?
+    public var updatedAt: Date
+
+    public init(ledgerId: UUID, currency: String, rate: Decimal, source: RateSource, asOf: String? = nil, updatedAt: Date) {
+        self.ledgerId = ledgerId
+        self.currency = currency
+        self.rate = rate
+        self.source = source
+        self.asOf = asOf
+        self.updatedAt = updatedAt
     }
 }
 

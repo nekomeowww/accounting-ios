@@ -28,6 +28,13 @@ public enum Currency {
 }
 
 extension Money {
+    public func converted(to target: String, rate: Decimal) -> Money {
+        var value = decimal * rate * pow(10, Currency.exponent(for: target))
+        var rounded = Decimal()
+        NSDecimalRound(&rounded, &value, 0, .plain)
+        return Money(minor: NSDecimalNumber(decimal: rounded).int64Value, currency: target)
+    }
+
     public var formatted: String {
         decimal.formatted(.currency(code: currency).precision(.fractionLength(exponent)))
     }

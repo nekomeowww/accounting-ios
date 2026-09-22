@@ -44,3 +44,27 @@ import Testing
     let count = try store.writer.read { try Expense.fetchCount($0) }
     #expect(count == 0)
 }
+
+@Test func expenseDetailShowsPaymentsSharesAndConversion() throws {
+    let store = try LedgerStore.inMemory()
+    let (ledger, me) = try store.createLedger(name: "L", currency: "JPY", settlementCurrency: "CNY", myName: "Innei")
+    let a = try store.addParticipant(ledgerId: ledger.id, name: "A")
+    let expense = try store.createExpense(ExpenseDraft(
+        ledgerId: ledger.id, merchant: "麺屋 猪一", occurredAt: Date(), currency: "JPY",
+        lines: [
+            LineDraft(name: "ラーメン", amountMinor: 2000, consumers: [ConsumerDraft(me.id), ConsumerDraft(a.id)]),
+            LineDraft(name: "ビール", amountMinor: 700, consumers: [ConsumerDraft(a.id)]),
+        ],
+        payments: [PaymentDraft(me.id, amountMinor: 2700, method: "card")]
+    ))
+    try store.setRates(ledgerId: ledger.id, ["JPY": Decimal(string: "0.043")!], source: .manual)
+
+    let detail = try #require(try store.writer.read { try LedgerStore.fetchExpenseDetail($0, expenseId: expense.id) })
+    #expect(detail.total.minor == 2700)
+    #expect(detail.lines.map(\.name) == ["ラーメン", "ビール"])
+    #expect(detail.payments.map(\.participantName) == ["Innei"])
+    #expect(detail.payments.first?.method == "card")
+    #expect(detail.shares.map(\.participantName) == ["A", "Innei"])
+    #expect(detail.shares.map(\.owedMinor) == [1700, 1000])
+    #expect(detail.settled(2700) == Money(minor: 11610, currency: "CNY"))
+}

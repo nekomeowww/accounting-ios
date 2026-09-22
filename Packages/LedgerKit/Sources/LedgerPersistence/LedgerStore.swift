@@ -27,9 +27,9 @@ public final class LedgerStore: Sendable {
     }
 
     @discardableResult
-    public func createLedger(name: String, type: String = "trip", currency: String, myName: String) throws -> (ledger: Ledger, me: Participant) {
+    public func createLedger(name: String, type: String = "trip", currency: String, settlementCurrency: String? = nil, myName: String) throws -> (ledger: Ledger, me: Participant) {
         let now = Date()
-        let ledger = Ledger(id: UUID(), name: name, type: type, defaultCurrency: currency, createdAt: now, updatedAt: now, version: 1, createdBy: actorId, updatedBy: actorId)
+        let ledger = Ledger(id: UUID(), name: name, type: type, defaultCurrency: currency, settlementCurrency: settlementCurrency ?? currency, createdAt: now, updatedAt: now, version: 1, createdBy: actorId, updatedBy: actorId)
         let me = Participant(id: UUID(), ledgerId: ledger.id, name: myName, createdAt: now, updatedAt: now, version: 1, createdBy: actorId, updatedBy: actorId)
         let member = Member(id: UUID(), ledgerId: ledger.id, participantId: me.id, actorId: actorId, role: .owner, createdAt: now, updatedAt: now, version: 1, createdBy: actorId, updatedBy: actorId)
         try writer.write { db in

@@ -31,33 +31,31 @@ struct ExpenseRowView: View {
 }
 
 struct BalanceCardView: View {
-    var balances: [BalanceRow]
+    var settlement: Settlement
     var myParticipantId: UUID?
-    var currency: String
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            if let primary = mine.first {
-                Text(primary.netMinor >= 0 ? "你应收" : "你应付")
+            if let mine {
+                Text(mine.net.minor >= 0 ? "你应收" : "你应付")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
-                Text(Money(minor: abs(primary.netMinor), currency: primary.currency).formatted)
+                Text(Money(minor: abs(mine.net.minor), currency: mine.net.currency).formatted)
                     .font(.largeTitle.weight(.bold))
                     .monospacedDigit()
             }
-            if mine.count > 1 {
-                Text(mine.dropFirst().map { "\($0.netMinor >= 0 ? "应收" : "应付") \(Money(minor: abs($0.netMinor), currency: $0.currency).formatted)" }.joined(separator: " · "))
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                    .monospacedDigit()
+            if !settlement.missingRates.isEmpty {
+                Label("缺少 \(settlement.missingRates.joined(separator: "、")) 汇率，未计入", systemImage: "exclamationmark.triangle")
+                    .font(.footnote)
+                    .foregroundStyle(.orange)
             }
             ForEach(others, id: \.self) { row in
                 HStack {
                     Text(row.participantName)
                     Spacer()
-                    Text(Money(minor: abs(row.netMinor), currency: row.currency).formatted)
+                    Text(Money(minor: abs(row.net.minor), currency: row.net.currency).formatted)
                         .monospacedDigit()
-                        .foregroundStyle(row.netMinor < 0 ? .orange : .green)
+                        .foregroundStyle(row.net.minor < 0 ? .orange : .green)
                 }
                 .font(.subheadline)
             }
@@ -65,12 +63,12 @@ struct BalanceCardView: View {
         .padding(.vertical, 4)
     }
 
-    private var mine: [BalanceRow] {
-        balances.filter { $0.participantId == myParticipantId }.sorted { ($0.currency == currency ? 0 : 1, $0.currency) < ($1.currency == currency ? 0 : 1, $1.currency) }
+    private var mine: SettlementRow? {
+        settlement.rows.first { $0.participantId == myParticipantId }
     }
 
-    private var others: [BalanceRow] {
-        balances.filter { $0.participantId != myParticipantId && $0.netMinor != 0 }
+    private var others: [SettlementRow] {
+        settlement.rows.filter { $0.participantId != myParticipantId && $0.net.minor != 0 }
     }
 }
 

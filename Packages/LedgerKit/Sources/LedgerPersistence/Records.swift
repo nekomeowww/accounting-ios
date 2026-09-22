@@ -40,3 +40,7 @@ extension JournalTx: FetchableRecord, PersistableRecord {
 extension JournalEntry: FetchableRecord, PersistableRecord {
     public static func databaseUUIDEncodingStrategy(for column: String) -> DatabaseUUIDEncodingStrategy { .uppercaseString }
 }
+
+extension ExchangeRate: FetchableRecord, PersistableRecord {
+    public static func databaseUUIDEncodingStrategy(for column: String) -> DatabaseUUIDEncodingStrategy { .uppercaseString }
+}

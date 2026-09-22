@@ -17,7 +17,7 @@ final class ActivityViewController: UIViewController {
 
     private let ledger: Ledger
     private var rows: [UUID: ActivityRow] = [:]
-    private var balances: [BalanceRow] = []
+    private var settlement = Settlement(currency: "", rows: [], missingRates: [])
     private var myParticipantId: UUID?
     private var observations: [AnyDatabaseCancellable] = []
     private var collectionView: UICollectionView!
@@ -29,6 +29,10 @@ final class ActivityViewController: UIViewController {
         super.init(nibName: nil, bundle: nil)
         title = ledger.name
         navigationItem.largeTitleDisplayMode = .never
+        navigationItem.rightBarButtonItem = UIBarButtonItem(image: UIImage(systemName: "ellipsis"), primaryAction: UIAction { [weak self] _ in
+            guard let self else { return }
+            navigationController?.pushViewController(LedgerSettingsViewController(ledgerId: ledger.id), animated: true)
+        })
     }
 
     @available(*, unavailable)
@@ -42,12 +46,20 @@ final class ActivityViewController: UIViewController {
         observe()
     }
 
+    override func viewWillAppear(_ animated: Bool) {
+        super.viewWillAppear(animated)
+        for indexPath in collectionView.indexPathsForSelectedItems ?? [] {
+            collectionView.deselectItem(at: indexPath, animated: animated)
+        }
+    }
+
     private func configureCollectionView() {
         var config = UICollectionLayoutListConfiguration(appearance: .insetGrouped)
         config.headerMode = .supplementary
         let layout = UICollectionViewCompositionalLayout.list(using: config)
         collectionView = UICollectionView(frame: view.bounds, collectionViewLayout: layout)
         collectionView.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+        collectionView.delegate = self
         view.addSubview(collectionView)
 
         askButton.configuration?.title = "Ask Agent…"
@@ -77,7 +89,7 @@ final class ActivityViewController: UIViewController {
             switch item {
             case .balance:
                 cell.contentConfiguration = UIHostingConfiguration {
-                    BalanceCardView(balances: balances, myParticipantId: myParticipantId, currency: ledger.defaultCurrency)
+                    BalanceCardView(settlement: settlement, myParticipantId: myParticipantId)
                 }
             case .expense(let id):
                 guard let row = rows[id] else { return }
@@ -114,8 +126,8 @@ final class ActivityViewController: UIViewController {
             self?.rows = Dictionary(uniqueKeysWithValues: rows.map { ($0.id, $0) })
             self?.applySnapshot(rows)
         })
-        observations.append(store.observeBalances(ledgerId: ledger.id).start(in: store.writer, scheduling: .immediate, onError: { _ in }) { [weak self] balances in
-            self?.balances = balances
+        observations.append(store.observeSettlement(ledgerId: ledger.id).start(in: store.writer, scheduling: .immediate, onError: { _ in }) { [weak self] settlement in
+            self?.settlement = settlement
             self?.reloadBalance()
         })
     }
@@ -138,6 +150,18 @@ final class ActivityViewController: UIViewController {
         guard snapshot.indexOfItem(.balance) != nil else { return }
         snapshot.reconfigureItems([.balance])
         dataSource.apply(snapshot, animatingDifferences: false)
+    }
+}
+
+extension ActivityViewController: UICollectionViewDelegate {
+    func collectionView(_ collectionView: UICollectionView, shouldSelectItemAt indexPath: IndexPath) -> Bool {
+        if case .expense = dataSource.itemIdentifier(for: indexPath) { return true }
+        return false
+    }
+
+    func collectionView(_ collectionView: UICollectionView, didSelectItemAt indexPath: IndexPath) {
+        guard case .expense(let id) = dataSource.itemIdentifier(for: indexPath) else { return }
+        navigationController?.pushViewController(ExpenseDetailViewController(expenseId: id, myParticipantId: myParticipantId), animated: true)
     }
 }
 
