@@ -19,12 +19,14 @@ struct ScriptedAgentProvider: AgentProvider {
                     }
                     if let amount = input.firstMatch(of: /\d+(\.\d+)?/).map({ String($0.0) }) {
                         try await Self.type("好的，整理成一张记账卡片，确认后再记入账本。", into: continuation)
+                        let placeName = input.replacingOccurrences(of: amount, with: "").trimmingCharacters(in: .whitespacesAndNewlines)
                         let payload: [String: Any] = [
-                            "merchant": input.replacingOccurrences(of: amount, with: "").trimmingCharacters(in: .whitespacesAndNewlines).prefix(24).description,
+                            "merchant": placeName.prefix(24).description,
                             "amount": amount,
                             "currency": input.uppercased().contains("CNY") || input.contains("元") ? "CNY" : "JPY",
                             "payer": me,
                             "category": "餐饮",
+                            "place": ["name": placeName, "area": "京都"],
                         ]
                         let json = String(decoding: try JSONSerialization.data(withJSONObject: payload), as: UTF8.self)
                         continuation.yield(.toolCall(ToolCall(id: UUID().uuidString, name: "propose_expense", arguments: json)))

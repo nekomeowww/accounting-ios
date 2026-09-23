@@ -11,6 +11,9 @@ public struct ActivityRow: Hashable, Sendable, Decodable, FetchableRecord, Ident
     public var totalMinor: Int64
     public var payerNames: String
     public var consumerCount: Int
+    public var placeName: String?
+    public var placeBranch: String?
+    public var placeAddress: String?
 
     public var total: Money { Money(minor: totalMinor, currency: currency) }
 }
@@ -47,8 +50,10 @@ extension LedgerStore {
         try ActivityRow.fetchAll(db, sql: """
                 SELECT e.id, e.merchant, e.occurredAt, e.timeZone, e.currency,
                   (SELECT COALESCE(SUM(amountMinor), 0) FROM expenseLine WHERE expenseId = e.id) AS totalMinor,
-                  \(payerAndConsumerColumnsSQL)
+                  \(payerAndConsumerColumnsSQL),
+                  p.name AS placeName, p.branch AS placeBranch, p.address AS placeAddress
                 FROM expense e
+                LEFT JOIN place p ON p.id = e.placeId
                 WHERE e.ledgerId = ? AND e.deletedAt IS NULL
                 ORDER BY e.occurredAt DESC
                 """, arguments: [ledgerId.uuidString])

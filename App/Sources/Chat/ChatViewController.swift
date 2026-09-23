@@ -6,6 +6,8 @@ import UIKit
 
 final class ChatViewController: UIViewController {
     private enum Section { case main }
+    private enum PlaceLookup { case searching, candidates([Candidate]) }
+    private enum PlaceOverride { case candidate(Candidate), unlinked }
 
     private let session: ChatSession
     private var messages: [UUID: Message] = [:]
@@ -14,6 +16,8 @@ final class ChatViewController: UIViewController {
     private var dataSource: UICollectionViewDiffableDataSource<Section, UUID>!
     private let composer = ChatComposerView()
     private var pinnedToBottom = true
+    private var placeLookups: [UUID: PlaceLookup] = [:]
+    private var placeOverrides: [UUID: PlaceOverride] = [:]
 
     init(ledger: Ledger) throws {
         session = try ChatSession(ledger: ledger)
@@ -101,9 +105,11 @@ final class ChatViewController: UIViewController {
                 ProposalCardView(
                     state: message.proposalState ?? .dismissed,
                     preview: preview,
+                    placeRow: placeRow(for: message),
                     onAccept: { [weak self] in self?.accept(message) },
                     onDismiss: { [weak self] in self?.session.dismiss(message) },
-                    onOpen: { [weak self] in self?.openExpense(message.expenseId) }
+                    onOpen: { [weak self] in self?.openExpense(message.expenseId) },
+                    onSelectPlace: { [weak self] candidate in self?.selectPlace(candidate, for: message) }
                 )
             }
         }
@@ -182,12 +188,83 @@ final class ChatViewController: UIViewController {
     }
 
     private func accept(_ message: Message) {
+        var candidate: Candidate?
+        if let hint = decodedProposal(message)?.place, let (list, auto) = placeLookupResult(for: message, hint: hint), !list.isEmpty {
+            candidate = auto ?? effectivePlace(messageId: message.id, candidates: list)
+        }
         do {
-            try session.accept(message)
+            try session.accept(message, place: candidate)
         } catch {
             let alert = UIAlertController(title: "记账失败", message: error.localizedDescription, preferredStyle: .alert)
             alert.addAction(UIAlertAction(title: "好", style: .default))
             present(alert, animated: true)
+        }
+    }
+
+    private func decodedProposal(_ message: Message) -> ExpenseProposal? {
+        guard message.kind == .proposal, let payload = message.payload else { return nil }
+        return try? ExpenseProposal.decode(payload)
+    }
+
+    private func placeRow(for message: Message) -> ProposalPlaceRow? {
+        if message.proposalState == .accepted {
+            guard let expenseId = message.expenseId, let place = acceptedPlace(expenseId: expenseId) else { return nil }
+            let name = [place.name, place.branch].compactMap { $0 }.joined(separator: " ")
+            return .fixed(name: name, subtitle: place.address)
+        }
+        guard let hint = decodedProposal(message)?.place else { return nil }
+        startPlaceSearchIfNeeded(message: message, hint: hint)
+        guard let (list, auto) = placeLookupResult(for: message, hint: hint) else { return .searching }
+        if list.isEmpty { return .unresolved }
+        if let auto { return .resolved(auto) }
+        return .multiple(list, selected: effectivePlace(messageId: message.id, candidates: list))
+    }
+
+    private func placeLookupResult(for message: Message, hint: PlaceHint) -> (list: [Candidate], auto: Candidate?)? {
+        guard case .candidates(let list) = placeLookups[message.id] else { return nil }
+        guard !list.isEmpty else { return (list, nil) }
+        let hintPhone = hint.phone.map(PlaceMatching.normalizePhone)
+        let phoneHit = hintPhone != nil && list[0].phone.map(PlaceMatching.normalizePhone) == hintPhone
+        return (list, (list.count == 1 || phoneHit) ? list[0] : nil)
+    }
+
+    private func effectivePlace(messageId: UUID, candidates: [Candidate]) -> Candidate? {
+        switch placeOverrides[messageId] {
+        case .candidate(let candidate): candidate
+        case .unlinked: nil
+        case nil: candidates.first
+        }
+    }
+
+    private func selectPlace(_ candidate: Candidate?, for message: Message) {
+        placeOverrides[message.id] = candidate.map(PlaceOverride.candidate) ?? .unlinked
+        refreshPlaceRow(for: message.id)
+    }
+
+    private func startPlaceSearchIfNeeded(message: Message, hint: PlaceHint) {
+        guard placeLookups[message.id] == nil else { return }
+        placeLookups[message.id] = .searching
+        let ledgerId = session.ledger.id
+        let occurredAt = message.createdAt
+        Task { [weak self] in
+            let results = await PlaceSearch.search(hint: hint, ledgerId: ledgerId, occurredAt: occurredAt)
+            guard let self else { return }
+            placeLookups[message.id] = .candidates(results)
+            refreshPlaceRow(for: message.id)
+        }
+    }
+
+    private func refreshPlaceRow(for messageId: UUID) {
+        var snapshot = dataSource.snapshot()
+        guard snapshot.indexOfItem(messageId) != nil else { return }
+        snapshot.reconfigureItems([messageId])
+        dataSource.apply(snapshot, animatingDifferences: false)
+    }
+
+    private func acceptedPlace(expenseId: UUID) -> Place? {
+        try? AppServices.store.writer.read { db in
+            guard let expense = try Expense.fetchOne(db, key: expenseId.uuidString), let placeId = expense.placeId else { return nil }
+            return try Place.fetchOne(db, key: placeId.uuidString)
         }
     }
 

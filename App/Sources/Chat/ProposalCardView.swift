@@ -38,12 +38,22 @@ struct ProposalPreview {
     }
 }
 
+enum ProposalPlaceRow {
+    case searching
+    case resolved(Candidate)
+    case multiple([Candidate], selected: Candidate?)
+    case unresolved
+    case fixed(name: String, subtitle: String?)
+}
+
 struct ProposalCardView: View {
     var state: ProposalState
     var preview: Result<ProposalPreview, Error>
+    var placeRow: ProposalPlaceRow?
     var onAccept: () -> Void
     var onDismiss: () -> Void
     var onOpen: () -> Void
+    var onSelectPlace: (Candidate?) -> Void = { _ in }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -90,7 +100,58 @@ struct ProposalCardView: View {
                 if let note = preview.note, !note.isEmpty { row("备注", note) }
             }
             .font(.subheadline)
+            placeRowContent
         }
+    }
+
+    @ViewBuilder
+    private var placeRowContent: some View {
+        if let placeRow {
+            switch placeRow {
+            case .searching:
+                HStack(spacing: 6) {
+                    ProgressView().controlSize(.mini)
+                    Text("📍 地点解析中…")
+                }
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+            case .fixed(let name, let subtitle):
+                Text("📍 " + (subtitle.map { "\(name) · \($0)" } ?? name))
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            case .resolved(let candidate):
+                Text("📍 \(candidateLabel(candidate))")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            case .unresolved:
+                Text("📍 地点待确认")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            case .multiple(let candidates, let selected):
+                Menu {
+                    ForEach(candidates, id: \.self) { candidate in
+                        Button {
+                            onSelectPlace(candidate)
+                        } label: {
+                            if candidate == selected {
+                                Label(candidateLabel(candidate), systemImage: "checkmark")
+                            } else {
+                                Text(candidateLabel(candidate))
+                            }
+                        }
+                    }
+                    Button("不关联地点", role: .destructive) { onSelectPlace(nil) }
+                } label: {
+                    Text("📍 \(selected?.name ?? candidates[0].name) · \(candidates.count) 个候选")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
+            }
+        }
+    }
+
+    private func candidateLabel(_ candidate: Candidate) -> String {
+        candidate.address.map { "\(candidate.name) · \($0)" } ?? candidate.name
     }
 
     private func row(_ title: String, _ value: String) -> some View {

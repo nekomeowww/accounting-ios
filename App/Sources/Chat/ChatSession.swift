@@ -36,8 +36,8 @@ final class ChatSession {
         task?.cancel()
     }
 
-    func accept(_ proposal: Message) throws {
-        try store.acceptProposal(messageId: proposal.id, ledgerId: ledger.id)
+    func accept(_ proposal: Message, place: Candidate? = nil) throws {
+        try store.acceptProposal(messageId: proposal.id, ledgerId: ledger.id, place: place)
     }
 
     func dismiss(_ proposal: Message) {

@@ -6,12 +6,13 @@ import LedgerPersistence
 enum AgentContextBuilder {
     static func systemPrompt(store: LedgerStore, ledger: Ledger) throws -> String {
         let participants = try store.participants(ledgerId: ledger.id)
-        let (activity, settlement, rates, me) = try store.writer.read { db in
+        let (activity, settlement, rates, me, lodging) = try store.writer.read { db in
             (
                 try LedgerStore.fetchActivity(db, ledgerId: ledger.id),
                 try LedgerStore.fetchSettlement(db, ledgerId: ledger.id),
                 try LedgerStore.fetchRates(db, ledgerId: ledger.id),
-                try Member.filter(Column("ledgerId") == ledger.id.uuidString && Column("actorId") == store.actorId.uuidString).fetchOne(db)
+                try Member.filter(Column("ledgerId") == ledger.id.uuidString && Column("actorId") == store.actorId.uuidString).fetchOne(db),
+                try LedgerStore.fetchLodgingPlaces(db, ledgerId: ledger.id)
             )
         }
         let myName = participants.first { $0.id == me?.participantId }?.name
@@ -26,6 +27,7 @@ enum AgentContextBuilder {
             lines.append("正在和你对话的用户是成员「\(myName)」，用户说的「我」指这个成员。")
         }
         lines.append("你目前不能修改、删除或撤销已有的账目；用户要求时明确说明做不到。")
+        lines.append("记账时如果能判断消费地点，在 propose_expense 里附上 place：分店、地址、电话只能从用户原话或小票里抠，不要编造；area 可以根据住宿和当天其他消费推断，但写在 area 里，不要冒充分店名。")
         let clock = DateFormatter()
         clock.locale = Locale(identifier: "en_US_POSIX")
         clock.dateFormat = "yyyy-MM-dd'T'HH:mm"
@@ -53,7 +55,21 @@ enum AgentContextBuilder {
         lines.append("最近消费（最新在前，最多 20 笔）：")
         for row in activity.prefix(20) {
             formatter.timeZone = TimeZone(identifier: row.timeZone) ?? .current
-            lines.append("- \(formatter.string(from: row.occurredAt)) \(row.merchant) \(row.total.formatted)，\(row.payerNames) 支付，\(row.consumerCount) 人承担")
+            var line = "- \(formatter.string(from: row.occurredAt)) \(row.merchant) \(row.total.formatted)，\(row.payerNames) 支付，\(row.consumerCount) 人承担"
+            if let placeName = row.placeName {
+                let place = [placeName, row.placeBranch].compactMap { $0 }.joined(separator: " ")
+                line += "，地点：\(place)" + (row.placeAddress.map { " · \($0)" } ?? "")
+            }
+            lines.append(line)
+        }
+        if !lodging.isEmpty {
+            lines.append("")
+            lines.append("住宿：")
+            for stay in lodging {
+                let place = [stay.place.name, stay.place.branch].compactMap { $0 }.joined(separator: " ")
+                formatter.timeZone = .current
+                lines.append("- \(place)，\(formatter.string(from: stay.startAt)) ~ \(formatter.string(from: stay.endAt))")
+            }
         }
         return lines.joined(separator: "\n")
     }
