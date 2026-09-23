@@ -214,6 +214,15 @@ enum Migrations {
                 t.add(column: "originalMinor", .integer)
             }
         }
+        migrator.registerMigration("v8") { db in
+            try db.create(table: "messageImage") { t in
+                t.primaryKey("id", .text)
+                t.belongsTo("message", onDelete: .cascade).notNull()
+                t.column("mimeType", .text).notNull()
+                t.column("data", .blob).notNull()
+                t.column("createdAt", .datetime).notNull()
+            }
+        }
         return migrator
     }
 

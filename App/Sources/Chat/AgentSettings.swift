@@ -26,6 +26,7 @@ struct AgentSettings: Equatable {
     var model: String
     var baseURL: String
     var apiKey: String
+    var readsImages: Bool
 
     static func load() -> AgentSettings {
         let defaults = UserDefaults.standard
@@ -34,13 +35,15 @@ struct AgentSettings: Equatable {
             provider: provider,
             model: defaults.string(forKey: "agent.model.\(provider.rawValue)") ?? provider.defaultModel,
             baseURL: defaults.string(forKey: "agent.baseURL") ?? "https://api.openai.com/v1",
-            apiKey: Keychain.read(account: provider.rawValue) ?? ""
+            apiKey: Keychain.read(account: provider.rawValue) ?? "",
+            readsImages: readsImages(provider)
         )
         #if DEBUG
         let env = ProcessInfo.processInfo.environment
         if settings.apiKey.isEmpty, let key = env["AGENT_API_KEY"] {
             let provider = AgentProviderKind(rawValue: env["AGENT_PROVIDER"] ?? "") ?? .anthropic
-            return AgentSettings(provider: provider, model: env["AGENT_MODEL"] ?? provider.defaultModel, baseURL: env["AGENT_BASE_URL"] ?? settings.baseURL, apiKey: key)
+            return AgentSettings(provider: provider, model: env["AGENT_MODEL"] ?? provider.defaultModel, baseURL: env["AGENT_BASE_URL"] ?? settings.baseURL,
+                                 apiKey: key, readsImages: env["AGENT_VISION"].map { $0 == "1" } ?? (provider == .anthropic))
         }
         #endif
         return settings
@@ -51,7 +54,12 @@ struct AgentSettings: Equatable {
         defaults.set(provider.rawValue, forKey: "agent.provider")
         defaults.set(model, forKey: "agent.model.\(provider.rawValue)")
         defaults.set(baseURL, forKey: "agent.baseURL")
+        defaults.set(readsImages, forKey: "agent.vision.\(provider.rawValue)")
         Keychain.write(apiKey, account: provider.rawValue)
+    }
+
+    static func readsImages(_ provider: AgentProviderKind) -> Bool {
+        UserDefaults.standard.object(forKey: "agent.vision.\(provider.rawValue)") as? Bool ?? (provider == .anthropic)
     }
 
     var isConfigured: Bool {
@@ -73,7 +81,7 @@ struct AgentSettings: Equatable {
             "conversationId": conversationId.uuidString, "systemPrompt": systemPrompt, "apiKey": apiKey,
             // pi-ai omits the output cap when maxTokens is 0; OpenAI-compatible hosts have differing limits.
             "model": ["id": model, "name": model, "provider": provider.rawValue, "api": api, "baseUrl": url,
-                      "reasoning": false, "input": ["text"], "contextWindow": 200_000, "maxTokens": provider == .anthropic ? 16_000 : 0,
+                      "reasoning": false, "input": readsImages ? ["text", "image"] : ["text"], "contextWindow": 200_000, "maxTokens": provider == .anthropic ? 16_000 : 0,
                       "cost": ["input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0]],
             "history": history,
             "tools": [["name": "propose_expense", "label": "记账卡片",

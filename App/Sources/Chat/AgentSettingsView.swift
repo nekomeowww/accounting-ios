@@ -14,6 +14,7 @@ struct AgentSettingsView: View {
                 .onChange(of: settings.provider) { _, provider in
                     settings.model = UserDefaults.standard.string(forKey: "agent.model.\(provider.rawValue)") ?? provider.defaultModel
                     settings.apiKey = Keychain.read(account: provider.rawValue) ?? ""
+                    settings.readsImages = AgentSettings.readsImages(provider)
                 }
                 TextField("Model", text: $settings.model)
                     .autocorrectionDisabled()
@@ -29,6 +30,11 @@ struct AgentSettingsView: View {
                             .foregroundStyle(.red)
                     }
                 }
+            }
+            Section {
+                Toggle("模型可以读图片", isOn: $settings.readsImages)
+            } footer: {
+                Text("扫描小票需要能读图片的模型，如 Claude、GPT-4o。DeepSeek 对话模型不支持。")
             }
             Section("API Key") {
                 SecureField("sk-…", text: $settings.apiKey)

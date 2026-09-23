@@ -261,3 +261,28 @@ private func tool(_ store: LedgerStore, _ prepared: PreparedAgentRun, index: Int
         try RepaymentProposal.decode(#"{"from":"a","to":"A","amount":"1","currency":"USD"}"#).resolve(participants: [(UUID(), "a")])
     }
 }
+
+@Test func photoIsSentWithItsTurnAndReplacedInLaterHistory() throws {
+    let store = try LedgerStore.inMemory()
+    let (ledger, _) = try store.createLedger(name: "Test", currency: "JPY", myName: "me")
+    let conversation = try store.openConversation(ledgerId: ledger.id).id
+    let photo = Data([0xFF, 0xD8, 0xFF, 0x01])
+    let prepared = try store.beginAgentRun(conversationId: conversation, text: "", images: [AgentImage(mimeType: "image/jpeg", data: photo)])
+    let input = try object(prepared.inputJSON ?? "")
+    let blocks = try #require((input["message"] as? [String: Any])?["content"] as? [[String: Any]])
+    #expect(blocks.count == 1)
+    #expect(blocks[0]["data"] as? String == photo.base64EncodedString())
+    #expect(try store.messageImages(messageId: prepared.run.userMessageId) == [photo])
+
+    try store.checkpointAgentMessage(conversationId: conversation, runId: prepared.run.id,
+                                     id: prepared.run.userMessageId.uuidString, payload: try json(input["message"]!))
+    try store.finishAgentRun(conversationId: conversation, runId: prepared.run.id, status: .failed, error: "HTTP 500")
+    let resumed = try #require(try store.resumeAgentRun(runId: prepared.run.id))
+    #expect(resumed.historyJSON.replacingOccurrences(of: "\\/", with: "/").contains(photo.base64EncodedString()))
+    try store.checkpointAgentMessage(conversationId: conversation, runId: resumed.run.id, id: resumed.run.id.uuidString + ":1", payload: try assistant(text: "ok", stop: "stop"))
+    try store.finishAgentRun(conversationId: conversation, runId: resumed.run.id, status: .complete)
+
+    let next = try store.beginAgentRun(conversationId: conversation, text: "thanks")
+    #expect(!next.historyJSON.contains(photo.base64EncodedString()))
+    #expect(next.historyJSON.contains("用户发送的照片"))
+}

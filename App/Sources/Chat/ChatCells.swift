@@ -7,15 +7,28 @@ import UIKit
 
 struct UserBubbleView: View {
     var text: String
+    var images: [UIImage] = []
 
     var body: some View {
         HStack {
             Spacer(minLength: 60)
-            Text(text)
-                .padding(.horizontal, 14)
-                .padding(.vertical, 9)
-                .background(Color.accentColor, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
-                .foregroundStyle(.white)
+            VStack(alignment: .trailing, spacing: 4) {
+                ForEach(images.indices, id: \.self) { index in
+                    Image(uiImage: images[index])
+                        .resizable()
+                        .scaledToFit()
+                        .frame(maxWidth: 200, maxHeight: 260)
+                        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+                        .accessibilityLabel("照片")
+                }
+                if !text.isEmpty {
+                    Text(text)
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 9)
+                        .background(Color.accentColor, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+                        .foregroundStyle(.white)
+                }
+            }
         }
         .padding(.vertical, 4)
     }

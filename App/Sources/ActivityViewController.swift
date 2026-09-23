@@ -25,7 +25,7 @@ final class ActivityViewController: UIViewController {
     private var observations: [AnyDatabaseCancellable] = []
     private var collectionView: UICollectionView!
     private var dataSource: UICollectionViewDiffableDataSource<Section, Item>!
-    private let askButton = UIButton(configuration: .prominentGlass())
+    private let bottomBar = UIView()
     private let segmentedControl = UISegmentedControl(items: ["Activity", "Map"])
     private var mapController: LedgerMapViewController!
 
@@ -36,11 +36,6 @@ final class ActivityViewController: UIViewController {
         super.init(nibName: nil, bundle: nil)
         navigationItem.largeTitleDisplayMode = .never
         navigationItem.subtitle = ledger.name
-        let add = UIBarButtonItem(systemItem: .add, primaryAction: UIAction { [weak self] _ in
-            guard let self else { return }
-            ExpenseForm.present(from: self, ledger: ledger)
-        })
-        add.accessibilityLabel = "记一笔"
         navigationItem.rightBarButtonItems = [UIBarButtonItem(image: UIImage(systemName: "ellipsis"), menu: UIMenu(children: [
             UIAction(title: "统计", image: UIImage(systemName: "chart.pie")) { [weak self] _ in
                 self?.navigationController?.pushViewController(LedgerStatsViewController(ledgerId: ledger.id), animated: true)
@@ -48,7 +43,7 @@ final class ActivityViewController: UIViewController {
             UIAction(title: "账本设置", image: UIImage(systemName: "gearshape")) { [weak self] _ in
                 self?.navigationController?.pushViewController(LedgerSettingsViewController(ledgerId: ledger.id), animated: true)
             },
-        ])), add]
+        ]))]
     }
 
     @available(*, unavailable)
@@ -90,19 +85,7 @@ final class ActivityViewController: UIViewController {
         collectionView.delegate = self
         view.addSubview(collectionView)
 
-        askButton.configuration?.title = "Ask Agent…"
-        askButton.configuration?.image = UIImage(systemName: "sparkles")
-        askButton.configuration?.imagePadding = 8
-        askButton.configuration?.cornerStyle = .capsule
-        askButton.configuration?.contentInsets = NSDirectionalEdgeInsets(top: 14, leading: 20, bottom: 14, trailing: 20)
-        askButton.translatesAutoresizingMaskIntoConstraints = false
-        askButton.addAction(UIAction { [weak self] _ in self?.openChat() }, for: .primaryActionTriggered)
-        view.addSubview(askButton)
-        NSLayoutConstraint.activate([
-            askButton.leadingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.leadingAnchor, constant: 16),
-            askButton.trailingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.trailingAnchor, constant: -16),
-            askButton.bottomAnchor.constraint(equalTo: view.safeAreaLayoutGuide.bottomAnchor, constant: -8),
-        ])
+        configureBottomBar()
         collectionView.contentInset.bottom = 72
         collectionView.verticalScrollIndicatorInsets.bottom = 72
     }
@@ -118,7 +101,7 @@ final class ActivityViewController: UIViewController {
         let controller = LedgerMapViewController(ledgerId: ledger.id, initialPlaceId: initialPlaceId)
         controller.onPreviewVisibilityChanged = { [weak self] visible in
             guard let self else { return }
-            askButton.isHidden = visible && segmentedControl.selectedSegmentIndex == 1
+            bottomBar.isHidden = visible && segmentedControl.selectedSegmentIndex == 1
         }
         controller.onOpenExpense = { [weak self] id in
             guard let self else { return }
@@ -127,7 +110,7 @@ final class ActivityViewController: UIViewController {
         addChild(controller)
         controller.view.translatesAutoresizingMaskIntoConstraints = false
         controller.view.isHidden = true
-        view.insertSubview(controller.view, belowSubview: askButton)
+        view.insertSubview(controller.view, belowSubview: bottomBar)
         NSLayoutConstraint.activate([
             controller.view.topAnchor.constraint(equalTo: view.topAnchor),
             controller.view.leadingAnchor.constraint(equalTo: view.leadingAnchor),
@@ -141,12 +124,71 @@ final class ActivityViewController: UIViewController {
     private func segmentChanged() {
         let showMap = segmentedControl.selectedSegmentIndex == 1
         mapController.view.isHidden = !showMap
-        askButton.isHidden = showMap && mapController.isPreviewVisible
+        bottomBar.isHidden = showMap && mapController.isPreviewVisible
     }
 
-    private func openChat() {
-        guard let chat = try? ChatViewController(ledger: ledger) else { return }
+    @discardableResult
+    func openChat() -> ChatViewController? {
+        guard let chat = try? ChatViewController(ledger: ledger) else { return nil }
         navigationController?.pushViewController(chat, animated: true)
+        return chat
+    }
+
+    private func configureBottomBar() {
+        let addButton = UIButton(configuration: .glass())
+        addButton.configuration?.image = UIImage(systemName: "plus")
+        addButton.configuration?.cornerStyle = .capsule
+        addButton.accessibilityLabel = "记一笔"
+        addButton.showsMenuAsPrimaryAction = true
+        addButton.menu = UIMenu(children: [
+            UIAction(title: "手动记一笔", image: UIImage(systemName: "square.and.pencil")) { [weak self] _ in
+                guard let self else { return }
+                ExpenseForm.present(from: self, ledger: ledger)
+            },
+            UIAction(title: "从相册导入", image: UIImage(systemName: "photo.on.rectangle")) { [weak self] _ in
+                self?.scanReceipt(source: .library)
+            },
+        ])
+
+        let askButton = UIButton(configuration: .glass())
+        askButton.configuration?.title = "Ask Agent…"
+        askButton.configuration?.image = UIImage(systemName: "sparkles")
+        askButton.configuration?.imagePadding = 8
+        askButton.configuration?.cornerStyle = .capsule
+        askButton.configuration?.contentInsets = NSDirectionalEdgeInsets(top: 14, leading: 18, bottom: 14, trailing: 56)
+        askButton.contentHorizontalAlignment = .leading
+        askButton.addAction(UIAction { [weak self] _ in self?.openChat() }, for: .primaryActionTriggered)
+
+        let cameraButton = UIButton(configuration: .prominentGlass())
+        cameraButton.configuration?.image = UIImage(systemName: "camera.fill")
+        cameraButton.configuration?.cornerStyle = .capsule
+        cameraButton.accessibilityLabel = "扫描小票"
+        cameraButton.addAction(UIAction { [weak self] _ in self?.scanReceipt(source: .camera) }, for: .primaryActionTriggered)
+
+        bottomBar.translatesAutoresizingMaskIntoConstraints = false
+        view.addSubview(bottomBar)
+        for button in [addButton, askButton, cameraButton] {
+            button.translatesAutoresizingMaskIntoConstraints = false
+            bottomBar.addSubview(button)
+        }
+        NSLayoutConstraint.activate([
+            bottomBar.leadingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.leadingAnchor, constant: 16),
+            bottomBar.trailingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.trailingAnchor, constant: -16),
+            bottomBar.bottomAnchor.constraint(equalTo: view.safeAreaLayoutGuide.bottomAnchor, constant: -8),
+            bottomBar.heightAnchor.constraint(equalToConstant: 52),
+            addButton.leadingAnchor.constraint(equalTo: bottomBar.leadingAnchor),
+            addButton.centerYAnchor.constraint(equalTo: bottomBar.centerYAnchor),
+            addButton.widthAnchor.constraint(equalToConstant: 52),
+            addButton.heightAnchor.constraint(equalToConstant: 52),
+            askButton.leadingAnchor.constraint(equalTo: addButton.trailingAnchor, constant: 10),
+            askButton.trailingAnchor.constraint(equalTo: bottomBar.trailingAnchor),
+            askButton.topAnchor.constraint(equalTo: bottomBar.topAnchor),
+            askButton.bottomAnchor.constraint(equalTo: bottomBar.bottomAnchor),
+            cameraButton.trailingAnchor.constraint(equalTo: askButton.trailingAnchor, constant: -5),
+            cameraButton.centerYAnchor.constraint(equalTo: askButton.centerYAnchor),
+            cameraButton.widthAnchor.constraint(equalToConstant: 42),
+            cameraButton.heightAnchor.constraint(equalToConstant: 42),
+        ])
     }
 
     private func configureDataSource() {

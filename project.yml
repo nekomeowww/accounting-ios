@@ -46,6 +46,7 @@ targets:
       path: App/Info.plist
       properties:
         CFBundleDisplayName: Accounting
+        NSCameraUsageDescription: 拍摄小票，交给 Agent 识别记账。
         UILaunchScreen: {}
         UIApplicationSceneManifest:
           UIApplicationSupportsMultipleScenes: false

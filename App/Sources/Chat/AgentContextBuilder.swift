@@ -29,6 +29,7 @@ enum AgentContextBuilder {
             lines.append("正在和你对话的用户是成员「\(myName)」，用户说的「我」指这个成员。")
         }
         lines.append("你目前不能修改、删除或撤销已有的账目；用户要求时明确说明做不到。")
+        lines.append("用户发来小票或账单照片时，读出商户、时间、逐项名称与金额、税费和合计，调用 propose_expense；照片看不出付款人时 payer 填「\(myName ?? "我")」；用户没说明谁吃了什么时，items 和顶层都不要填 consumers（即全员均摊），不要擅自归给某一个人；看不清的数字在回复里指出，不要猜。")
         lines.append("记账时如果能判断消费地点，在 propose_expense 里附上 place：分店、地址、电话只能从用户原话或小票里抠，不要编造；area 可以根据住宿和当天其他消费推断，但写在 area 里，不要冒充分店名。")
         let clock = DateFormatter()
         clock.locale = Locale(identifier: "en_US_POSIX")

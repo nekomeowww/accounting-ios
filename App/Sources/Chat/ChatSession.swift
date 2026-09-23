@@ -29,10 +29,10 @@ final class ChatSession {
         conversation = try store.openConversation(ledgerId: ledger.id)
     }
 
-    func send(_ text: String) throws {
+    func send(_ text: String, images: [AgentImage] = []) throws {
         guard task == nil else { throw AgentStoreError.busy }
         guard AgentSettings.load().isConfigured else { throw ChatSessionError.notConfigured }
-        run(try store.beginAgentRun(conversationId: conversation.id, text: text))
+        run(try store.beginAgentRun(conversationId: conversation.id, text: text, images: images))
     }
 
     func retry(_ assistant: Message) throws {

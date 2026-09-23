@@ -35,6 +35,15 @@ public struct PreparedAgentRun: Sendable {
     public let inputJSON: String?
 }
 
+public struct AgentImage: Sendable {
+    public var mimeType: String
+    public var data: Data
+    public init(mimeType: String, data: Data) {
+        self.mimeType = mimeType
+        self.data = data
+    }
+}
+
 public struct AgentToolExecution: Sendable {
     public let resultJSON: String
     public let proposalId: UUID?
@@ -57,8 +66,8 @@ public enum AgentStoreError: Error, Equatable, Sendable, LocalizedError {
 }
 
 extension LedgerStore {
-    public func beginAgentRun(conversationId: UUID, text: String) throws -> PreparedAgentRun {
-        guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { throw AgentStoreError.invalidMessage }
+    public func beginAgentRun(conversationId: UUID, text: String, images: [AgentImage] = []) throws -> PreparedAgentRun {
+        guard images.count > 0 || !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { throw AgentStoreError.invalidMessage }
         return try writer.write { db in
             try Self.requireIdle(db, conversationId)
             try Self.importAgentHistory(db, conversationId)
@@ -68,16 +77,31 @@ extension LedgerStore {
             let user = Message(id: UUID(), conversationId: conversationId, role: .user, text: text,
                                status: .complete, createdAt: now, updatedAt: now)
             try user.insert(db)
+            var content: [[String: Any]] = []
+            for image in images {
+                let id = UUID()
+                try db.execute(sql: "INSERT INTO messageImage (id, messageId, mimeType, data, createdAt) VALUES (?, ?, ?, ?, ?)",
+                               arguments: [id.uuidString, user.id.uuidString, image.mimeType, image.data, now])
+                content.append(["type": "image", "mimeType": image.mimeType, "imageId": id.uuidString])
+            }
+            if !text.isEmpty { content.append(["type": "text", "text": text]) }
             let run = AgentRunRecord(id: UUID(), conversationId: conversationId, userMessageId: user.id,
                                      status: .running, createdAt: now, updatedAt: now)
             try run.insert(db)
-            let payload = try AgentJSON.encode(["role": "user", "content": text, "timestamp": now.timeIntervalSince1970 * 1000])
+            let payload = try AgentJSON.encode(["role": "user", "content": images.isEmpty ? text as Any : content, "timestamp": now.timeIntervalSince1970 * 1000])
             try Self.insertTranscript(db, conversationId, id: user.id.uuidString, runId: run.id, payload: payload)
             try db.execute(sql: "UPDATE message SET agentRunId = ?, agentMessageId = ? WHERE id = ?",
                            arguments: [run.id.uuidString, user.id.uuidString, user.id.uuidString])
             try Self.touchConversation(db, conversationId)
-            return PreparedAgentRun(run: run, historyJSON: try Self.historyJSON(history),
-                                    inputJSON: try AgentJSON.encode(["id": user.id.uuidString, "message": AgentJSON.object(payload)]))
+            let input = try Self.modelMessage(db, AgentJSON.object(payload), inlineImages: true)
+            return PreparedAgentRun(run: run, historyJSON: try Self.historyJSON(db, history, inlineFor: nil),
+                                    inputJSON: try AgentJSON.encode(["id": user.id.uuidString, "message": input]))
+        }
+    }
+
+    public func messageImages(messageId: UUID) throws -> [Data] {
+        try writer.read { db in
+            try Data.fetchAll(db, sql: "SELECT data FROM messageImage WHERE messageId = ? ORDER BY rowid", arguments: [messageId.uuidString])
         }
     }
 
@@ -93,7 +117,7 @@ extension LedgerStore {
             let run = try Self.activeRun(db, conversationId, runId)
             let entries = try Self.transcript(db, conversationId)
             if let existing = entries.first(where: { $0.id == id }) {
-                guard existing.runId == run.id, existing.payload == canonical else { throw AgentStoreError.identityConflict }
+                guard existing.runId == run.id, try AgentJSON.identity(existing.payload) == AgentJSON.identity(canonical) else { throw AgentStoreError.identityConflict }
                 return
             }
             guard !id.isEmpty, id.hasPrefix(runId.uuidString + ":") else { throw AgentStoreError.invalidMessage }
@@ -220,7 +244,7 @@ extension LedgerStore {
             guard let last = recovered.last, ["user", "toolResult"].contains(try AgentJSON.object(last.payload)["role"] as? String ?? "") else {
                 throw AgentStoreError.cannotResume
             }
-            return PreparedAgentRun(run: run, historyJSON: try Self.historyJSON(recovered), inputJSON: nil)
+            return PreparedAgentRun(run: run, historyJSON: try Self.historyJSON(db, recovered, inlineFor: previous.userMessageId.uuidString), inputJSON: nil)
         }
     }
 
@@ -256,8 +280,25 @@ extension LedgerStore {
         return entries.filter { !incompleteIds.contains($0.id) && !incompleteIds.contains($0.sourceMessageId ?? "") }
     }
 
-    private static func historyJSON(_ entries: [AgentTranscriptEntry]) throws -> String {
-        try AgentJSON.encode(entries.map { ["id": $0.id, "message": try AgentJSON.object($0.payload)] })
+    private static func historyJSON(_ db: Database, _ entries: [AgentTranscriptEntry], inlineFor inlineId: String?) throws -> String {
+        try AgentJSON.encode(entries.map { entry in
+            ["id": entry.id, "message": try modelMessage(db, AgentJSON.object(entry.payload), inlineImages: entry.id == inlineId)]
+        })
+    }
+
+    /// Photos are sent once, with the turn that attached them; later turns see a text stand-in to keep requests small.
+    private static func modelMessage(_ db: Database, _ message: [String: Any], inlineImages: Bool) throws -> [String: Any] {
+        guard message["role"] as? String == "user", let blocks = message["content"] as? [[String: Any]] else { return message }
+        var result = message
+        result["content"] = try blocks.map { block -> [String: Any] in
+            guard block["type"] as? String == "image", let id = block["imageId"] as? String else { return block }
+            guard inlineImages else { return ["type": "text", "text": "（用户发送的照片，已在当时处理）"] }
+            guard let data = try Data.fetchOne(db, sql: "SELECT data FROM messageImage WHERE id = ?", arguments: [id]) else {
+                throw AgentStoreError.invalidMessage
+            }
+            return ["type": "image", "mimeType": block["mimeType"] ?? "image/jpeg", "data": data.base64EncodedString()]
+        }
+        return result
     }
 
     private static func insertTranscript(_ db: Database, _ conversationId: UUID, id: String, runId: UUID?, source: String? = nil, payload: String) throws {
@@ -388,6 +429,13 @@ private enum AgentJSON {
     static func text(_ message: [String: Any]) -> String {
         if let text = message["content"] as? String { return text }
         return (message["content"] as? [[String: Any]] ?? []).filter { $0["type"] as? String == "text" }.compactMap { $0["text"] as? String }.joined()
+    }
+    static func identity(_ json: String) throws -> String {
+        var value = try object(json)
+        if let blocks = value["content"] as? [[String: Any]] {
+            value["content"] = blocks.map { $0["type"] as? String == "image" ? ["type": "image", "mimeType": $0["mimeType"] ?? ""] : $0 }
+        }
+        return try encode(value)
     }
     static func incomplete(_ object: [String: Any]) -> Bool {
         object["role"] as? String == "assistant" && ["error", "aborted", "length"].contains(object["stopReason"] as? String ?? "")

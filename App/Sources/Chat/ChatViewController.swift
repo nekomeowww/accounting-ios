@@ -17,6 +17,7 @@ final class ChatViewController: UIViewController {
     private var pinnedToBottom = true
     private var placeLookups: [UUID: PlaceLookup] = [:]
     private var placeOverrides: [UUID: ProposalPlaceChoice] = [:]
+    private var images: [UUID: [UIImage]] = [:]
 
     init(ledger: Ledger) throws {
         session = try ChatSession(ledger: ledger)
@@ -71,14 +72,8 @@ final class ChatViewController: UIViewController {
             composer.bottomAnchor.constraint(equalTo: view.keyboardLayoutGuide.topAnchor),
         ])
         composer.onSend = { [weak self] text in
-            guard let self else { return }
-            do {
-                try session.send(text)
-                composer.clear()
-                pinnedToBottom = true
-            } catch {
-                present(UIAlertController(title: "发送失败", message: error.localizedDescription, preferredStyle: .alert), animated: true)
-            }
+            guard let self, send(text) else { return }
+            composer.clear()
         }
         composer.onStop = { [weak self] in self?.session.stop() }
         composer.onHeightChange = { [weak self] in self?.view.setNeedsLayout() }
@@ -89,9 +84,24 @@ final class ChatViewController: UIViewController {
         composer.onModelTap = openSettings
     }
 
+    @discardableResult
+    func send(_ text: String, images: [AgentImage] = []) -> Bool {
+        do {
+            try session.send(text, images: images)
+            pinnedToBottom = true
+            return true
+        } catch {
+            let alert = UIAlertController(title: "发送失败", message: error.localizedDescription, preferredStyle: .alert)
+            alert.addAction(UIAlertAction(title: "好", style: .default))
+            present(alert, animated: true)
+            return false
+        }
+    }
+
     private func configureDataSource() {
-        let user = UICollectionView.CellRegistration<UICollectionViewListCell, Message> { cell, _, message in
-            cell.contentConfiguration = UIHostingConfiguration { UserBubbleView(text: message.text) }.margins(.vertical, 2)
+        let user = UICollectionView.CellRegistration<UICollectionViewListCell, Message> { [unowned self] cell, _, message in
+            let photos = userImages(message.id)
+            cell.contentConfiguration = UIHostingConfiguration { UserBubbleView(text: message.text, images: photos) }.margins(.vertical, 2)
         }
         let assistant = UICollectionView.CellRegistration<AssistantMessageCell, Message> { [unowned self] cell, _, message in
             let streaming = session.streamingMessageId == message.id
@@ -200,6 +210,13 @@ final class ChatViewController: UIViewController {
         dataSource.apply(snapshot, animatingDifferences: view.window != nil) { [weak self] in
             self?.scrollToBottomIfPinned()
         }
+    }
+
+    private func userImages(_ messageId: UUID) -> [UIImage] {
+        if let cached = images[messageId] { return cached }
+        let loaded = ((try? AppServices.store.messageImages(messageId: messageId)) ?? []).compactMap(UIImage.init(data:))
+        images[messageId] = loaded
+        return loaded
     }
 
     private func cellKind(_ message: Message) -> Int {
