@@ -146,11 +146,7 @@ extension LedgerStore {
                   p.latitude, p.longitude, p.provider, p.providerId, p.createdAt, p.updatedAt,
                   e.id AS expenseId, e.merchant, e.occurredAt, e.timeZone, e.currency, e.category AS expenseCategory,
                   (SELECT COALESCE(SUM(amountMinor), 0) FROM expenseLine WHERE expenseId = e.id) AS totalMinor,
-                  (SELECT COALESCE(group_concat(pt.name, ', '), '') FROM expensePayment ep
-                     JOIN participant pt ON pt.id = ep.participantId WHERE ep.expenseId = e.id) AS payerNames,
-                  (SELECT COUNT(DISTINCT lc.participantId) FROM lineConsumer lc
-                     JOIN expenseLine l ON l.id = lc.lineId
-                     WHERE l.expenseId = e.id AND (lc.weight > 0 OR lc.exactMinor > 0)) AS consumerCount
+                  \(payerAndConsumerColumnsSQL)
                 FROM place p
                 JOIN expense e ON e.placeId = p.id AND e.deletedAt IS NULL
                 WHERE p.ledgerId = ?

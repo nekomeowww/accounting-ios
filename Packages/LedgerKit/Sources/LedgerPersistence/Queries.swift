@@ -25,6 +25,14 @@ public struct BalanceRow: Hashable, Sendable, Decodable, FetchableRecord {
 }
 
 extension LedgerStore {
+    static let payerAndConsumerColumnsSQL = """
+            (SELECT COALESCE(group_concat(pp.name, ', '), '') FROM expensePayment ep
+               JOIN participant pp ON pp.id = ep.participantId WHERE ep.expenseId = e.id) AS payerNames,
+            (SELECT COUNT(DISTINCT lc.participantId) FROM lineConsumer lc
+               JOIN expenseLine l ON l.id = lc.lineId
+               WHERE l.expenseId = e.id AND (lc.weight > 0 OR lc.exactMinor > 0)) AS consumerCount
+            """
+
     public func observeLedgers() -> ValueObservation<ValueReducers.Fetch<[Ledger]>> {
         ValueObservation.tracking { db in
             try Ledger.filter(Column("deletedAt") == nil).order(Column("createdAt").desc).fetchAll(db)
@@ -39,11 +47,7 @@ extension LedgerStore {
         try ActivityRow.fetchAll(db, sql: """
                 SELECT e.id, e.merchant, e.occurredAt, e.timeZone, e.currency,
                   (SELECT COALESCE(SUM(amountMinor), 0) FROM expenseLine WHERE expenseId = e.id) AS totalMinor,
-                  (SELECT COALESCE(group_concat(p.name, ', '), '') FROM expensePayment ep
-                     JOIN participant p ON p.id = ep.participantId WHERE ep.expenseId = e.id) AS payerNames,
-                  (SELECT COUNT(DISTINCT lc.participantId) FROM lineConsumer lc
-                     JOIN expenseLine l ON l.id = lc.lineId
-                     WHERE l.expenseId = e.id AND (lc.weight > 0 OR lc.exactMinor > 0)) AS consumerCount
+                  \(payerAndConsumerColumnsSQL)
                 FROM expense e
                 WHERE e.ledgerId = ? AND e.deletedAt IS NULL
                 ORDER BY e.occurredAt DESC

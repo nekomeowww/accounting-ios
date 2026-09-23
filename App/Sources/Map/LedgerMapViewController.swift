@@ -44,6 +44,8 @@ final class LedgerMapViewController: UIViewController {
     private var settlementCurrency: String?
     private var rates: [String: Decimal] = [:]
     private var didFitInitialPins = false
+    private var latestPins: [LedgerPersistence.MapPin] = []
+    private var isApplyingDiff = false
 
     init(ledgerId: UUID) {
         self.ledgerId = ledgerId
@@ -59,6 +61,11 @@ final class LedgerMapViewController: UIViewController {
         configureEmptyLabel()
         loadRates()
         observe()
+    }
+
+    override func viewDidLayoutSubviews() {
+        super.viewDidLayoutSubviews()
+        attemptInitialFit()
     }
 
     private func configureMapView() {
@@ -108,23 +115,50 @@ final class LedgerMapViewController: UIViewController {
     }
 
     private func apply(_ pins: [LedgerPersistence.MapPin]) {
-        pinsById = Dictionary(uniqueKeysWithValues: pins.map { ($0.id, $0) })
+        let newById = Dictionary(uniqueKeysWithValues: pins.map { ($0.id, $0) })
+        let existingAnnotations = mapView.annotations.compactMap { $0 as? MapPinAnnotation }
+        let existingById = Dictionary(uniqueKeysWithValues: existingAnnotations.map { ($0.pin.id, $0) })
+
+        let removed = existingAnnotations.filter { newById[$0.pin.id] == nil }
+        let added = pins.filter { existingById[$0.id] == nil }.map(MapPinAnnotation.init)
+        let changed = pins.compactMap { pin -> MapPinAnnotation? in
+            guard let existing = existingById[pin.id], existing.pin != pin else { return nil }
+            return MapPinAnnotation(pin: pin)
+        }
+        let changedIds = Set(changed.map { $0.pin.id })
+
+        isApplyingDiff = true
+        if !removed.isEmpty { mapView.removeAnnotations(removed) }
+        if !changedIds.isEmpty {
+            mapView.removeAnnotations(existingAnnotations.filter { changedIds.contains($0.pin.id) })
+        }
+        let toAdd = added + changed
+        if !toAdd.isEmpty { mapView.addAnnotations(toAdd) }
+        isApplyingDiff = false
+
+        pinsById = newById
+        latestPins = pins
         emptyLabel.isHidden = !pins.isEmpty
+        attemptInitialFit()
 
-        let existing = mapView.annotations.compactMap { $0 as? MapPinAnnotation }
-        mapView.removeAnnotations(existing)
-        mapView.addAnnotations(pins.map(MapPinAnnotation.init))
-
-        if !didFitInitialPins, !pins.isEmpty {
-            didFitInitialPins = true
-            fit(pins)
+        if let selectedPinId {
+            if let pin = pinsById[selectedPinId] {
+                let isSelected = mapView.selectedAnnotations.contains { ($0 as? MapPinAnnotation)?.pin.id == selectedPinId }
+                if !isSelected, let annotation = mapView.annotations.compactMap({ $0 as? MapPinAnnotation }).first(where: { $0.pin.id == selectedPinId }) {
+                    mapView.selectAnnotation(annotation, animated: false)
+                }
+                showPreview(for: pin)
+            } else {
+                self.selectedPinId = nil
+                hidePreview()
+            }
         }
+    }
 
-        if let selectedPinId, let pin = pinsById[selectedPinId] {
-            showPreview(for: pin)
-        } else if selectedPinId != nil {
-            hidePreview()
-        }
+    private func attemptInitialFit() {
+        guard !didFitInitialPins, !latestPins.isEmpty, view.bounds.width > 0, view.bounds.height > 0 else { return }
+        didFitInitialPins = true
+        fit(latestPins)
     }
 
     private func fit(_ pins: [LedgerPersistence.MapPin]) {
@@ -134,9 +168,19 @@ final class LedgerMapViewController: UIViewController {
                 latitudinalMeters: 500, longitudinalMeters: 500
             )
             mapView.setRegion(region, animated: false)
-        } else {
-            mapView.showAnnotations(mapView.annotations, animated: false)
+            return
         }
+        var mapRect = MKMapRect.null
+        for annotation in mapView.annotations {
+            let point = MKMapPoint(annotation.coordinate)
+            mapRect = mapRect.union(MKMapRect(x: point.x, y: point.y, width: 0, height: 0))
+        }
+        guard !mapRect.isNull else { return }
+        let padding = UIEdgeInsets(
+            top: view.safeAreaInsets.top + 40, left: 50,
+            bottom: view.safeAreaInsets.bottom + 100, right: 50
+        )
+        mapView.setVisibleMapRect(mapRect, edgePadding: padding, animated: false)
     }
 
     @objc private func handleMapTap(_ gesture: UITapGestureRecognizer) {
@@ -215,13 +259,17 @@ extension LedgerMapViewController: MKMapViewDelegate {
     }
 
     func mapView(_ mapView: MKMapView, didSelect annotation: MKAnnotation) {
+        if let cluster = annotation as? MKClusterAnnotation {
+            mapView.showAnnotations(cluster.memberAnnotations, animated: true)
+            return
+        }
         guard let pinAnnotation = annotation as? MapPinAnnotation else { return }
         selectedPinId = pinAnnotation.pin.id
         showPreview(for: pinAnnotation.pin)
     }
 
     func mapView(_ mapView: MKMapView, didDeselect annotation: MKAnnotation) {
-        guard annotation is MapPinAnnotation else { return }
+        guard !isApplyingDiff, annotation is MapPinAnnotation else { return }
         selectedPinId = nil
         hidePreview()
     }
