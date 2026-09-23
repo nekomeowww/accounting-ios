@@ -28,3 +28,20 @@ import Testing
     #expect(ranked.count == 5)
     #expect(ranked.map(\.providerId) == ["0", "1", "2", "3", "4"])
 }
+
+@Test func resolvedPlaceDefaultsToAutoWhenNoExplicitChoice() {
+    let auto = Candidate(name: "五味八珍", latitude: 35.0, longitude: 139.0)
+    #expect(PlaceMatching.resolvedPlace(explicit: nil, auto: auto) == auto)
+    #expect(PlaceMatching.resolvedPlace(explicit: nil, auto: nil) == nil)
+}
+
+@Test func resolvedPlacePrefersExplicitCandidateOverAuto() {
+    let auto = Candidate(name: "五味八珍", latitude: 35.0, longitude: 139.0)
+    let picked = Candidate(name: "ラスカ熱海店", latitude: 35.5, longitude: 139.5)
+    #expect(PlaceMatching.resolvedPlace(explicit: .candidate(picked), auto: auto) == picked)
+}
+
+@Test func resolvedPlaceDeclineNeverFallsBackToAuto() {
+    let auto = Candidate(name: "五味八珍", latitude: 35.0, longitude: 139.0)
+    #expect(PlaceMatching.resolvedPlace(explicit: .declined, auto: auto) == nil)
+}

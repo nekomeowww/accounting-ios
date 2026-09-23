@@ -6,6 +6,7 @@ struct MapPreviewCard: View {
     var pin: LedgerPersistence.MapPin
     var settlementCurrency: String?
     var rates: [String: Decimal]
+    var myParticipantId: UUID?
     var onSelectExpense: (UUID) -> Void
 
     var body: some View {
@@ -110,10 +111,12 @@ struct MapPreviewCard: View {
     }
 
     private func payerLabel(_ expense: LedgerPersistence.MapPin.ExpenseRef) -> String {
-        switch expense.consumerCount {
-        case 0: expense.payerNames
-        case 1: "\(expense.payerNames) 支付 · 个人消费"
-        default: "\(expense.payerNames) 支付 · \(expense.consumerCount) 人分摊"
+        let isMe = myParticipantId != nil && expense.payerParticipantIds == [myParticipantId]
+        let paidPrefix = isMe ? "你支付" : "\(expense.payerNames) 支付"
+        return switch expense.consumerCount {
+        case 0: isMe ? "你" : expense.payerNames
+        case 1: "\(paidPrefix) · 个人消费"
+        default: "\(paidPrefix) · \(expense.consumerCount) 人分摊"
         }
     }
 

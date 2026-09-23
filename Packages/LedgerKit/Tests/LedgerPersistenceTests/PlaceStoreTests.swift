@@ -75,10 +75,13 @@ import Testing
     try store.setExpensePlace(expenseId: expense.id, candidate: candidate)
     let assigned = try store.writer.read { try Expense.fetchOne($0, key: expense.id.uuidString) }
     #expect(assigned?.placeId != nil)
+    #expect(assigned?.version == expense.version + 1)
+    #expect(assigned?.updatedBy == store.actorId)
 
     try store.setExpensePlace(expenseId: expense.id, candidate: nil)
     let removed = try store.writer.read { try Expense.fetchOne($0, key: expense.id.uuidString) }
     #expect(removed?.placeId == nil)
+    #expect(removed?.version == expense.version + 2)
 }
 
 @Test func fetchMapPinsAggregatesExpensesAndTotal() throws {

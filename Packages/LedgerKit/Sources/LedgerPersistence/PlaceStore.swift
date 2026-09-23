@@ -11,6 +11,7 @@ public struct MapPin: Hashable, Sendable, Identifiable {
         public var currency: String
         public var totalMinor: Int64
         public var payerNames: String
+        public var payerParticipantIds: [UUID]
         public var consumerCount: Int
     }
 
@@ -62,13 +63,13 @@ extension LedgerStore {
             if let candidate {
                 let place = try Self.upsertPlace(db, ledgerId: expense.ledgerId, candidate: candidate)
                 try db.execute(
-                    sql: "UPDATE expense SET placeId = ?, placeQuery = NULL, updatedAt = ? WHERE id = ?",
-                    arguments: [place.id.uuidString, Date(), expenseId.uuidString]
+                    sql: "UPDATE expense SET placeId = ?, placeQuery = NULL, updatedAt = ?, updatedBy = ?, version = version + 1 WHERE id = ?",
+                    arguments: [place.id.uuidString, Date(), actorId.uuidString, expenseId.uuidString]
                 )
             } else {
                 try db.execute(
-                    sql: "UPDATE expense SET placeId = NULL, updatedAt = ? WHERE id = ?",
-                    arguments: [Date(), expenseId.uuidString]
+                    sql: "UPDATE expense SET placeId = NULL, updatedAt = ?, updatedBy = ?, version = version + 1 WHERE id = ?",
+                    arguments: [Date(), actorId.uuidString, expenseId.uuidString]
                 )
             }
         }
@@ -139,6 +140,7 @@ extension LedgerStore {
             var expenseCategory: String?
             var totalMinor: Int64
             var payerNames: String
+            var payerParticipantIds: String
             var consumerCount: Int
         }
         let rows = try Row.fetchAll(db, sql: """
@@ -174,7 +176,9 @@ extension LedgerStore {
             expensesByPlace[row.placeId, default: []].append(MapPin.ExpenseRef(
                 expenseId: row.expenseId, merchant: row.merchant, occurredAt: row.occurredAt,
                 timeZone: row.timeZone, currency: row.currency, totalMinor: row.totalMinor,
-                payerNames: row.payerNames, consumerCount: row.consumerCount
+                payerNames: row.payerNames,
+                payerParticipantIds: row.payerParticipantIds.split(separator: ",").compactMap { UUID(uuidString: String($0)) },
+                consumerCount: row.consumerCount
             ))
             if let category = row.expenseCategory {
                 categoryCounts[row.placeId, default: [:]][category, default: 0] += 1

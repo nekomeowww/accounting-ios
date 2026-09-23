@@ -102,7 +102,8 @@ final class ActivityViewController: UIViewController {
     private func configureMapController() {
         let controller = LedgerMapViewController(ledgerId: ledger.id, initialPlaceId: initialPlaceId)
         controller.onPreviewVisibilityChanged = { [weak self] visible in
-            self?.askButton.isHidden = visible
+            guard let self else { return }
+            askButton.isHidden = visible && segmentedControl.selectedSegmentIndex == 1
         }
         controller.onOpenExpense = { [weak self] id in
             guard let self else { return }

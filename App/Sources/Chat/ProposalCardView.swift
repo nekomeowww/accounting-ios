@@ -40,8 +40,8 @@ struct ProposalPreview {
 
 enum ProposalPlaceRow {
     case searching
-    case resolved(Candidate)
-    case multiple([Candidate], selected: Candidate?)
+    case auto(candidates: [Candidate], selected: Candidate?)
+    case multiple(hintName: String, candidates: [Candidate], selected: Candidate?)
     case unresolved
     case fixed(name: String, subtitle: String?)
 }
@@ -119,34 +119,40 @@ struct ProposalCardView: View {
                 Text("📍 " + (subtitle.map { "\(name) · \($0)" } ?? name))
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
-            case .resolved(let candidate):
-                Text("📍 \(candidateLabel(candidate))")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
             case .unresolved:
                 Text("📍 地点待确认")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
-            case .multiple(let candidates, let selected):
-                Menu {
-                    ForEach(candidates, id: \.self) { candidate in
-                        Button {
-                            onSelectPlace(candidate)
-                        } label: {
-                            if candidate == selected {
-                                Label(candidateLabel(candidate), systemImage: "checkmark")
-                            } else {
-                                Text(candidateLabel(candidate))
-                            }
-                        }
-                    }
-                    Button("不关联地点", role: .destructive) { onSelectPlace(nil) }
-                } label: {
-                    Text("📍 \(selected?.name ?? candidates[0].name) · \(candidates.count) 个候选")
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
+            case .auto(let candidates, let selected):
+                placeMenu(candidates: candidates, selected: selected) {
+                    "📍 " + (selected.map(candidateLabel) ?? "不关联地点")
+                }
+            case .multiple(let hintName, let candidates, let selected):
+                placeMenu(candidates: candidates, selected: selected) {
+                    "📍 \(selected?.name ?? hintName) · \(candidates.count) 个候选"
                 }
             }
+        }
+    }
+
+    private func placeMenu(candidates: [Candidate], selected: Candidate?, label: () -> String) -> some View {
+        Menu {
+            ForEach(candidates, id: \.self) { candidate in
+                Button {
+                    onSelectPlace(candidate)
+                } label: {
+                    if candidate == selected {
+                        Label(candidateLabel(candidate), systemImage: "checkmark")
+                    } else {
+                        Text(candidateLabel(candidate))
+                    }
+                }
+            }
+            Button("不关联地点", role: .destructive) { onSelectPlace(nil) }
+        } label: {
+            Text(label())
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
         }
     }
 

@@ -43,11 +43,10 @@ final class LedgerMapViewController: UIViewController {
     private var pinsById: [UUID: LedgerPersistence.MapPin] = [:]
     private var selectedPinId: UUID?
     private var observation: AnyDatabaseCancellable?
-    private var settlementCurrency: String?
-    private var rates: [String: Decimal] = [:]
     private var didFitInitialPins = false
     private var latestPins: [LedgerPersistence.MapPin] = []
     private var isApplyingDiff = false
+    private var myParticipantId: UUID?
 
     init(ledgerId: UUID, initialPlaceId: UUID? = nil) {
         self.ledgerId = ledgerId
@@ -62,8 +61,16 @@ final class LedgerMapViewController: UIViewController {
         super.viewDidLoad()
         configureMapView()
         configureEmptyLabel()
-        loadRates()
+        loadMyParticipant()
         observe()
+    }
+
+    private func loadMyParticipant() {
+        let store = AppServices.store
+        myParticipantId = try? store.writer.read { db in
+            try Member.filter(Column("ledgerId") == ledgerId.uuidString && Column("actorId") == store.actorId.uuidString)
+                .fetchOne(db)?.participantId
+        }
     }
 
     override func viewDidLayoutSubviews() {
@@ -102,12 +109,13 @@ final class LedgerMapViewController: UIViewController {
         ])
     }
 
-    private func loadRates() {
+    private func fetchRates() -> (currency: String?, rates: [String: Decimal]) {
         let store = AppServices.store
-        try? store.writer.read { db in
-            settlementCurrency = try Ledger.fetchOne(db, key: ledgerId.uuidString)?.settlementCurrency
-            rates = Dictionary(uniqueKeysWithValues: try LedgerStore.fetchRates(db, ledgerId: ledgerId).map { ($0.currency, $0.rate) })
-        }
+        return (try? store.writer.read { db in
+            let currency = try Ledger.fetchOne(db, key: ledgerId.uuidString)?.settlementCurrency
+            let rates = Dictionary(uniqueKeysWithValues: try LedgerStore.fetchRates(db, ledgerId: ledgerId).map { ($0.currency, $0.rate) })
+            return (currency, rates)
+        }) ?? (nil, [:])
     }
 
     private func observe() {
@@ -160,10 +168,11 @@ final class LedgerMapViewController: UIViewController {
         if let selectedPinId {
             if let pin = pinsById[selectedPinId] {
                 let isSelected = mapView.selectedAnnotations.contains { ($0 as? MapPinAnnotation)?.pin.id == selectedPinId }
-                if !isSelected, let annotation = mapView.annotations.compactMap({ $0 as? MapPinAnnotation }).first(where: { $0.pin.id == selectedPinId }) {
+                if isSelected {
+                    showPreview(for: pin)
+                } else if let annotation = mapView.annotations.compactMap({ $0 as? MapPinAnnotation }).first(where: { $0.pin.id == selectedPinId }) {
                     mapView.selectAnnotation(annotation, animated: false)
                 }
-                showPreview(for: pin)
             } else {
                 self.selectedPinId = nil
                 hidePreview()
@@ -206,7 +215,8 @@ final class LedgerMapViewController: UIViewController {
     }
 
     private func showPreview(for pin: LedgerPersistence.MapPin) {
-        let card = MapPreviewCard(pin: pin, settlementCurrency: settlementCurrency, rates: rates) { [weak self] expenseId in
+        let (settlementCurrency, rates) = fetchRates()
+        let card = MapPreviewCard(pin: pin, settlementCurrency: settlementCurrency, rates: rates, myParticipantId: myParticipantId) { [weak self] expenseId in
             self?.onOpenExpense?(expenseId)
         }
         if let previewHost {

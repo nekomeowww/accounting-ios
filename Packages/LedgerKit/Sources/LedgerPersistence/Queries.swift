@@ -31,6 +31,8 @@ extension LedgerStore {
     static let payerAndConsumerColumnsSQL = """
             (SELECT COALESCE(group_concat(pp.name, ', '), '') FROM expensePayment ep
                JOIN participant pp ON pp.id = ep.participantId WHERE ep.expenseId = e.id) AS payerNames,
+            (SELECT COALESCE(group_concat(ep.participantId, ','), '') FROM expensePayment ep
+               WHERE ep.expenseId = e.id) AS payerParticipantIds,
             (SELECT COUNT(DISTINCT lc.participantId) FROM lineConsumer lc
                JOIN expenseLine l ON l.id = lc.lineId
                WHERE l.expenseId = e.id AND (lc.weight > 0 OR lc.exactMinor > 0)) AS consumerCount

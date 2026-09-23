@@ -20,7 +20,20 @@ public struct Candidate: Hashable, Sendable, Codable {
     }
 }
 
+public enum ProposalPlaceChoice: Equatable, Sendable {
+    case candidate(Candidate)
+    case declined
+}
+
 public enum PlaceMatching {
+    public static func resolvedPlace(explicit: ProposalPlaceChoice?, auto: Candidate?) -> Candidate? {
+        switch explicit {
+        case .candidate(let candidate): candidate
+        case .declined: nil
+        case nil: auto
+        }
+    }
+
     public static func normalizePhone(_ raw: String) -> String {
         let digits = raw.filter(\.isNumber)
         guard digits.hasPrefix("81") else { return digits }

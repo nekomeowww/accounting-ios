@@ -7,7 +7,6 @@ import UIKit
 final class ChatViewController: UIViewController {
     private enum Section { case main }
     private enum PlaceLookup { case searching, candidates([Candidate]) }
-    private enum PlaceOverride { case candidate(Candidate), unlinked }
 
     private let session: ChatSession
     private var messages: [UUID: Message] = [:]
@@ -17,7 +16,7 @@ final class ChatViewController: UIViewController {
     private let composer = ChatComposerView()
     private var pinnedToBottom = true
     private var placeLookups: [UUID: PlaceLookup] = [:]
-    private var placeOverrides: [UUID: PlaceOverride] = [:]
+    private var placeOverrides: [UUID: ProposalPlaceChoice] = [:]
 
     init(ledger: Ledger) throws {
         session = try ChatSession(ledger: ledger)
@@ -191,7 +190,7 @@ final class ChatViewController: UIViewController {
     private func accept(_ message: Message) {
         var candidate: Candidate?
         if let hint = decodedProposal(message)?.place, let (list, auto) = placeLookupResult(for: message, hint: hint), !list.isEmpty {
-            candidate = auto ?? effectivePlace(messageId: message.id, candidates: list)
+            candidate = PlaceMatching.resolvedPlace(explicit: placeOverrides[message.id], auto: auto)
         }
         do {
             try session.accept(message, place: candidate)
@@ -217,8 +216,9 @@ final class ChatViewController: UIViewController {
         startPlaceSearchIfNeeded(message: message, hint: hint, occurredAt: occurredAt)
         guard let (list, auto) = placeLookupResult(for: message, hint: hint) else { return .searching }
         if list.isEmpty { return .unresolved }
-        if let auto { return .resolved(auto) }
-        return .multiple(list, selected: effectivePlace(messageId: message.id, candidates: list))
+        let selected = PlaceMatching.resolvedPlace(explicit: placeOverrides[message.id], auto: auto)
+        if auto != nil { return .auto(candidates: list, selected: selected) }
+        return .multiple(hintName: hint.name, candidates: list, selected: selected)
     }
 
     private func placeLookupResult(for message: Message, hint: PlaceHint) -> (list: [Candidate], auto: Candidate?)? {
@@ -229,16 +229,8 @@ final class ChatViewController: UIViewController {
         return (list, (list.count == 1 || phoneHit) ? list[0] : nil)
     }
 
-    private func effectivePlace(messageId: UUID, candidates: [Candidate]) -> Candidate? {
-        switch placeOverrides[messageId] {
-        case .candidate(let candidate): candidate
-        case .unlinked: nil
-        case nil: candidates.first
-        }
-    }
-
     private func selectPlace(_ candidate: Candidate?, for message: Message) {
-        placeOverrides[message.id] = candidate.map(PlaceOverride.candidate) ?? .unlinked
+        placeOverrides[message.id] = candidate.map(ProposalPlaceChoice.candidate) ?? .declined
         refreshPlaceRow(for: message.id)
     }
 
