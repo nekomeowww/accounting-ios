@@ -97,7 +97,7 @@ extension LedgerStore {
     }
 
     @discardableResult
-    public func acceptProposal(messageId: UUID, ledgerId: UUID, timeZone: TimeZone = .current) throws -> Expense {
+    public func acceptProposal(messageId: UUID, ledgerId: UUID, timeZone: TimeZone = .current, place: Candidate? = nil) throws -> Expense {
         try writer.write { db in
             guard let message = try Message.fetchOne(db, key: messageId.uuidString), message.kind == .proposal,
                   message.proposalState == .pending, let payload = message.payload else { throw ProposalError.notPending }
@@ -106,8 +106,18 @@ extension LedgerStore {
                 .order(Column("createdAt"))
                 .fetchAll(db)
                 .map { (id: $0.id, name: $0.name) }
-            let draft = try ExpenseProposal.decode(payload).draft(ledgerId: ledgerId, participants: participants, timeZone: timeZone)
-            let expense = try Self.insertExpense(db, draft, actorId: actorId)
+            let proposal = try ExpenseProposal.decode(payload)
+            let draft = try proposal.draft(ledgerId: ledgerId, participants: participants, timeZone: timeZone)
+            var expense = try Self.insertExpense(db, draft, actorId: actorId)
+            if let place {
+                let placeRow = try Self.upsertPlace(db, ledgerId: ledgerId, candidate: place)
+                try db.execute(sql: "UPDATE expense SET placeId = ? WHERE id = ?", arguments: [placeRow.id.uuidString, expense.id.uuidString])
+                expense.placeId = placeRow.id
+            } else if let hint = proposal.place {
+                let json = String(data: try JSONEncoder().encode(hint), encoding: .utf8)
+                try db.execute(sql: "UPDATE expense SET placeQuery = ? WHERE id = ?", arguments: [json, expense.id.uuidString])
+                expense.placeQuery = json
+            }
             try db.execute(
                 sql: "UPDATE message SET proposalState = 'accepted', expenseId = ?, updatedAt = ? WHERE id = ?",
                 arguments: [expense.id.uuidString, Date(), messageId.uuidString]

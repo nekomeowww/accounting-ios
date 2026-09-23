@@ -21,6 +21,8 @@ public struct ExpenseDetail: Hashable, Sendable {
     public var shares: [Share]
     public var settlementCurrency: String
     public var rate: Decimal?
+    public var place: Place?
+    public var placeQuery: String?
 
     public var total: Money { Money(minor: lines.reduce(0) { $0 + $1.amountMinor }, currency: expense.currency) }
 
@@ -57,7 +59,11 @@ extension LedgerStore {
         let rate = try ExchangeRate
             .filter(Column("ledgerId") == ledger.id.uuidString && Column("currency") == expense.currency)
             .fetchOne(db)?.rate
-        return ExpenseDetail(expense: expense, lines: lines, payments: payments, shares: shares, settlementCurrency: ledger.settlementCurrency, rate: rate)
+        let place = try expense.placeId.flatMap { try Place.fetchOne(db, key: $0.uuidString) }
+        return ExpenseDetail(
+            expense: expense, lines: lines, payments: payments, shares: shares,
+            settlementCurrency: ledger.settlementCurrency, rate: rate, place: place, placeQuery: expense.placeQuery
+        )
     }
 
     public func observeExpenseDetail(expenseId: UUID) -> ValueObservation<ValueReducers.Fetch<ExpenseDetail?>> {

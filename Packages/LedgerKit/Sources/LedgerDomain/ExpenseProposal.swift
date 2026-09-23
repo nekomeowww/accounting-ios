@@ -1,5 +1,21 @@
 import Foundation
 
+public struct PlaceHint: Hashable, Sendable, Codable {
+    public var name: String
+    public var branch: String?
+    public var address: String?
+    public var phone: String?
+    public var area: String?
+
+    public init(name: String, branch: String? = nil, address: String? = nil, phone: String? = nil, area: String? = nil) {
+        self.name = name
+        self.branch = branch
+        self.address = address
+        self.phone = phone
+        self.area = area
+    }
+}
+
 public struct ExpenseProposal: Hashable, Sendable, Codable {
     public var merchant: String
     public var amount: String
@@ -9,9 +25,10 @@ public struct ExpenseProposal: Hashable, Sendable, Codable {
     public var occurredAt: String?
     public var category: String?
     public var note: String?
+    public var place: PlaceHint?
 
     enum CodingKeys: String, CodingKey {
-        case merchant, amount, currency, payer, consumers, category, note
+        case merchant, amount, currency, payer, consumers, category, note, place
         case occurredAt = "occurred_at"
     }
 
@@ -24,7 +41,13 @@ public struct ExpenseProposal: Hashable, Sendable, Codable {
         "consumers":{"type":"array","items":{"type":"string"},"description":"平摊这笔钱的成员名；省略表示全员。个人消费或请客只写承担者本人"},
         "occurred_at":{"type":"string","description":"消费时间 yyyy-MM-ddTHH:mm（本地时间），省略表示现在"},
         "category":{"type":"string","description":"分类，如 餐饮、交通、住宿、门票、购物"},
-        "note":{"type":"string","description":"备注"}}}
+        "note":{"type":"string","description":"备注"},
+        "place":{"type":"object","additionalProperties":false,"required":["name"],"description":"消费地点线索","properties":{
+        "name":{"type":"string","description":"店名，不含分店"},
+        "branch":{"type":"string","description":"分店名，如「京都四条河原町店」「ラスカ熱海店」，只能从用户原话或小票里抠，不要编造"},
+        "address":{"type":"string","description":"小票或原话中的地址，含 〒，只能从用户原话或小票里抠，不要编造"},
+        "phone":{"type":"string","description":"电话，只能从用户原话或小票里抠，不要编造"},
+        "area":{"type":"string","description":"城市或街区，如「京都 下京区」，可以根据住宿和当天其他消费推断，但要写在 area 里，不要冒充分店名"}}}}}
         """
 
     public static func decode(_ json: String) throws -> ExpenseProposal {

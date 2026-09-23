@@ -144,6 +144,28 @@ enum Migrations {
                 t.add(column: "expenseId", .text).references("expense", onDelete: .setNull)
             }
         }
+        migrator.registerMigration("v6") { db in
+            try db.create(table: "place") { t in
+                t.primaryKey("id", .text)
+                t.belongsTo("ledger", onDelete: .cascade).notNull()
+                t.column("name", .text).notNull()
+                t.column("branch", .text)
+                t.column("address", .text)
+                t.column("phone", .text)
+                t.column("category", .text)
+                t.column("latitude", .double).notNull()
+                t.column("longitude", .double).notNull()
+                t.column("provider", .text).notNull()
+                t.column("providerId", .text)
+                t.column("createdAt", .datetime).notNull()
+                t.column("updatedAt", .datetime).notNull()
+                t.uniqueKey(["ledgerId", "provider", "providerId"])
+            }
+            try db.alter(table: "expense") { t in
+                t.add(column: "placeId", .text).references("place", onDelete: .setNull)
+                t.add(column: "placeQuery", .text)
+            }
+        }
         return migrator
     }
 

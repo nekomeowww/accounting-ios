@@ -148,8 +148,10 @@ public struct Expense: Hashable, Sendable, Codable, Identifiable {
     public var version: Int64
     public var createdBy: UUID
     public var updatedBy: UUID
+    public var placeId: UUID?
+    public var placeQuery: String?
 
-    public init(id: UUID, ledgerId: UUID, merchant: String, note: String? = nil, category: String? = nil, occurredAt: Date, timeZone: String, currency: String, location: Location? = nil, source: ExpenseSource, createdAt: Date, updatedAt: Date, deletedAt: Date? = nil, version: Int64, createdBy: UUID, updatedBy: UUID) {
+    public init(id: UUID, ledgerId: UUID, merchant: String, note: String? = nil, category: String? = nil, occurredAt: Date, timeZone: String, currency: String, location: Location? = nil, source: ExpenseSource, createdAt: Date, updatedAt: Date, deletedAt: Date? = nil, version: Int64, createdBy: UUID, updatedBy: UUID, placeId: UUID? = nil, placeQuery: String? = nil) {
         self.id = id
         self.ledgerId = ledgerId
         self.merchant = merchant
@@ -169,6 +171,40 @@ public struct Expense: Hashable, Sendable, Codable, Identifiable {
         self.version = version
         self.createdBy = createdBy
         self.updatedBy = updatedBy
+        self.placeId = placeId
+        self.placeQuery = placeQuery
+    }
+}
+
+public struct Place: Hashable, Sendable, Codable, Identifiable {
+    public var id: UUID
+    public var ledgerId: UUID
+    public var name: String
+    public var branch: String?
+    public var address: String?
+    public var phone: String?
+    public var category: String?
+    public var latitude: Double
+    public var longitude: Double
+    public var provider: String
+    public var providerId: String?
+    public var createdAt: Date
+    public var updatedAt: Date
+
+    public init(id: UUID, ledgerId: UUID, name: String, branch: String? = nil, address: String? = nil, phone: String? = nil, category: String? = nil, latitude: Double, longitude: Double, provider: String, providerId: String? = nil, createdAt: Date, updatedAt: Date) {
+        self.id = id
+        self.ledgerId = ledgerId
+        self.name = name
+        self.branch = branch
+        self.address = address
+        self.phone = phone
+        self.category = category
+        self.latitude = latitude
+        self.longitude = longitude
+        self.provider = provider
+        self.providerId = providerId
+        self.createdAt = createdAt
+        self.updatedAt = updatedAt
     }
 }
 
