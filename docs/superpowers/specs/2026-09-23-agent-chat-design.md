@@ -1,6 +1,7 @@
 # Agent Chat 页面 Spec
 
 日期：2026-09-23。状态：已讨论定稿，待实现。
+后续演进：[pi Agent 与 JavaScriptCore 接入 Spec](2026-09-23-pi-agent-runtime-design.md) 替代本文的 Swift provider 与运行时方案。
 上游：[产品 Spec v0.2](../../product/product-spec-v0.2.md) 第 31、32 节；[本地数据模型 Spec](2026-09-23-local-schema-design.md)。
 
 ## 1. 范围

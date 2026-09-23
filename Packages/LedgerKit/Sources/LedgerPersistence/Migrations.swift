@@ -144,6 +144,47 @@ enum Migrations {
                 t.add(column: "expenseId", .text).references("expense", onDelete: .setNull)
             }
         }
+        migrator.registerMigration("v5") { db in
+            try db.execute(sql: """
+                ALTER TABLE conversation ADD COLUMN agentHistoryVersion INTEGER NOT NULL DEFAULT 0;
+                CREATE TABLE agentRun (
+                    id TEXT PRIMARY KEY NOT NULL,
+                    conversationId TEXT NOT NULL REFERENCES conversation(id) ON DELETE CASCADE,
+                    userMessageId TEXT NOT NULL REFERENCES message(id),
+                    status TEXT NOT NULL CHECK (status IN ('running','complete','failed','aborted','interrupted')),
+                    error TEXT,
+                    createdAt DATETIME NOT NULL,
+                    updatedAt DATETIME NOT NULL
+                );
+                CREATE UNIQUE INDEX agentRun_active ON agentRun(conversationId) WHERE status = 'running';
+                CREATE TABLE agentTranscript (
+                    conversationId TEXT NOT NULL REFERENCES conversation(id) ON DELETE CASCADE,
+                    id TEXT NOT NULL,
+                    sequence INTEGER NOT NULL,
+                    runId TEXT REFERENCES agentRun(id),
+                    sourceMessageId TEXT,
+                    formatVersion INTEGER NOT NULL DEFAULT 1,
+                    payload TEXT NOT NULL,
+                    PRIMARY KEY (conversationId, id),
+                    UNIQUE (conversationId, sequence)
+                );
+                CREATE TABLE agentToolExecution (
+                    conversationId TEXT NOT NULL,
+                    assistantMessageId TEXT NOT NULL,
+                    toolCallId TEXT NOT NULL,
+                    name TEXT NOT NULL,
+                    arguments TEXT NOT NULL,
+                    result TEXT NOT NULL,
+                    proposalId TEXT REFERENCES message(id),
+                    completedAt DATETIME NOT NULL,
+                    PRIMARY KEY (conversationId, assistantMessageId, toolCallId),
+                    FOREIGN KEY (conversationId, assistantMessageId) REFERENCES agentTranscript(conversationId, id) ON DELETE CASCADE
+                );
+                ALTER TABLE message ADD COLUMN agentRunId TEXT REFERENCES agentRun(id);
+                ALTER TABLE message ADD COLUMN agentMessageId TEXT;
+                CREATE UNIQUE INDEX message_agent ON message(conversationId, agentMessageId);
+                """)
+        }
         migrator.registerMigration("v6") { db in
             try db.create(table: "place") { t in
                 t.primaryKey("id", .text)

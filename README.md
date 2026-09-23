@@ -16,6 +16,8 @@ xcodegen generate
 open Accounting.xcodeproj
 ```
 
+构建还需要 Node 24/npm；Xcode 会按 `Runtime/package-lock.json` 安装依赖、构建 pi Agent 的 JS 资源并打入 App。设备端使用 JavaScriptCore，不包含 Node。宿主验证方式见 [Runtime](Runtime/README.md)。
+
 `Accounting.xcodeproj` 由 `project.yml` 生成，不入库；改动工程配置改 `project.yml` 后重新生成。
 命令行：
 

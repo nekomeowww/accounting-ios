@@ -32,7 +32,36 @@ private let tokyo = TimeZone(identifier: "Asia/Tokyo")!
         try draft(#"{"merchant":"x","amount":"-3","currency":"CNY","payer":"innei"}"#)
     }
     #expect(throws: ProposalError.malformed) { try draft(#"{"merchant":"x"}"#) }
+    for amount in ["12oops", "9223372036854775808", "18446744073709551617"] {
+        #expect(throws: ProposalError.invalidAmount(amount)) {
+            try draft("{\"merchant\":\"x\",\"amount\":\"\(amount)\",\"currency\":\"JPY\",\"payer\":\"innei\"}")
+        }
+    }
     let cents = try draft(#"{"merchant":"x","amount":"12.50","currency":"USD","payer":"neko","consumers":["neko","neko"]}"#)
     #expect(cents.totalMinor == 1250)
     #expect(cents.lines[0].consumers.count == 1)
+}
+
+@Test func itemizedProposalKeepsOneBillAndChecksItsTotal() throws {
+    let json = #"{"merchant":"麵屋優光","amount":"2580","currency":"JPY","payer":"innei","items":[{"name":"鶏白湯らーめん","amount":"1250","consumers":["innei"]},{"name":"淡竹","amount":"900","consumers":["whitewater"]},{"name":"饺子","amount":"430","consumers":["innei","whitewater"]}]}"#
+    let draft = try ExpenseProposal.decode(json).draft(ledgerId: ledger, participants: members)
+    #expect(draft.totalMinor == 2580)
+    #expect(draft.payments.count == 1)
+    #expect(draft.payments[0].amountMinor == 2580)
+    #expect(draft.lines.map(\.name) == ["鶏白湯らーめん", "淡竹", "饺子"])
+    #expect(draft.lines.map(\.amountMinor) == [1250, 900, 430])
+    #expect(draft.lines.map { $0.consumers.map(\.participantId) } == [[me], [white], [me, white]])
+    let built = try ExpenseBuilder.build(draft, ledgerParticipantIds: Set(members.map(\.id)), actorId: me)
+    let balances = Dictionary(grouping: built.entries, by: \.participantId).mapValues { $0.reduce(0) { $0 + $1.amountMinor } }
+    #expect(balances[me] == 1115)
+    #expect(balances[white] == -1115)
+
+    let mismatch = json.replacingOccurrences(of: "\"430\"", with: "\"429\"")
+    #expect(throws: ProposalError.itemTotalMismatch) {
+        try ExpenseProposal.decode(mismatch).draft(ledgerId: ledger, participants: members)
+    }
+    let empty = #"{"merchant":"x","amount":"1","currency":"JPY","payer":"innei","items":[]}"#
+    #expect(throws: ProposalError.emptyItems) {
+        try ExpenseProposal.decode(empty).draft(ledgerId: ledger, participants: members)
+    }
 }

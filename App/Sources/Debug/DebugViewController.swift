@@ -9,7 +9,6 @@ struct DebugView: View {
     var counts: [(String, Int)]
     var onOpen: (String) -> Void
     var onReset: () -> Void
-    @AppStorage(ScriptedAgentProvider.defaultsKey) private var mockAgent = false
     @State private var confirmingReset = false
 
     var body: some View {
@@ -24,16 +23,6 @@ struct DebugView: View {
                 row("open-ledger-settings", "账本设置 / 汇率", "gearshape")
                 row("open-chat", "Agent Chat", "sparkles")
                 row("open-agent-settings", "AI 设置", "key")
-            }
-            Section {
-                Toggle(isOn: $mockAgent) {
-                    Label("本地模拟 Agent", systemImage: "theatermasks")
-                }
-                .accessibilityIdentifier("mock-agent")
-            } header: {
-                Text("Agent")
-            } footer: {
-                Text("开启后 Chat 不联网：输入带数字生成记账卡片，带「失败」或 fail 模拟错误，其余返回 Markdown 示例。")
             }
             Section("数据") {
                 ForEach(counts, id: \.0) { table, count in

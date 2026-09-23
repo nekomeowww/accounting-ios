@@ -10,30 +10,49 @@ final class ChatSession {
     let conversation: Conversation
     private let store = AppServices.store
     private var task: Task<Void, Never>?
+    private var runtime: PiAgentRuntime?
+    private var currentRunId: UUID?
+    private var activeTextId: String?
+    private var activeText = ""
+    private var lastFlush = Date.distantPast
     private(set) var streamingMessageId: UUID?
     private(set) var streamingText = ""
+    private(set) var toolStatus: String?
     var onStreamingUpdate: ((UUID, String) -> Void)?
     var onStreamingStateChange: (() -> Void)?
+    var onRunError: ((String) -> Void)?
 
     var isStreaming: Bool { task != nil }
 
     init(ledger: Ledger) throws {
         self.ledger = ledger
-        self.conversation = try store.openConversation(ledgerId: ledger.id)
+        conversation = try store.openConversation(ledgerId: ledger.id)
     }
 
     func send(_ text: String) throws {
-        let (_, assistant) = try store.appendUserTurn(conversationId: conversation.id, text: text)
-        run(assistantId: assistant.id)
+        guard task == nil else { throw AgentStoreError.busy }
+        guard AgentSettings.load().isConfigured else { throw ChatSessionError.notConfigured }
+        run(try store.beginAgentRun(conversationId: conversation.id, text: text))
     }
 
     func retry(_ assistant: Message) throws {
-        try store.restartAssistantTurn(messageId: assistant.id)
-        run(assistantId: assistant.id)
+        guard task == nil else { throw AgentStoreError.busy }
+        guard AgentSettings.load().isConfigured else { throw ChatSessionError.notConfigured }
+        guard let runId = assistant.agentRunId else {
+            let user = try store.writer.read { db in
+                try Message.filter(Column("conversationId") == conversation.id.uuidString && Column("role") == "user" && Column("createdAt") < assistant.createdAt)
+                    .order(Column("createdAt").desc).fetchOne(db)
+            }
+            guard let user else { throw AgentStoreError.cannotResume }
+            try send(user.text)
+            return
+        }
+        if let prepared = try store.resumeAgentRun(runId: runId) { run(prepared) }
     }
 
     func stop() {
         task?.cancel()
+        if let currentRunId { runtime?.abort(id: currentRunId.uuidString) }
     }
 
     func accept(_ proposal: Message, place: Candidate? = nil) throws {
@@ -44,81 +63,142 @@ final class ChatSession {
         try? store.dismissProposal(messageId: proposal.id)
     }
 
-    private static let proposeExpense = ToolSpec(
-        name: "propose_expense",
-        description: "向用户展示一张记账卡片，用户点「记账」后才会写入账本。每笔消费调用一次。",
-        inputSchema: ExpenseProposal.inputSchema
-    )
-
-    private static func turn(_ message: Message) -> ChatTurn {
-        guard message.kind == .proposal else {
-            return ChatTurn(role: message.role == .user ? .user : .assistant, text: message.text)
-        }
-        let state = switch message.proposalState {
-        case .accepted: "用户已确认，已记入账本"
-        case .dismissed: "用户已取消，未记账"
-        default: "等待用户确认"
-        }
-        return ChatTurn(role: .assistant, text: "（我提出了一张记账卡片：\(message.payload ?? "")；状态：\(state)）")
-    }
-
-    private func run(assistantId: UUID) {
-        guard let provider = AgentSettings.load().makeProvider() else {
-            try? store.updateAssistantTurn(messageId: assistantId, text: "", status: .failed, error: "未配置 AI 服务")
-            return
-        }
-        let system: String
-        let turns: [ChatTurn]
-        do {
-            system = try AgentContextBuilder.systemPrompt(store: store, ledger: ledger)
-            turns = try store.writer.read { db in
-                try Message.filter(Column("conversationId") == conversation.id.uuidString && Column("status") == "complete")
-                    .order(Column("createdAt")).fetchAll(db)
-            }.map(Self.turn)
-        } catch {
-            try? store.updateAssistantTurn(messageId: assistantId, text: "", status: .failed, error: error.localizedDescription)
-            return
-        }
-        streamingMessageId = assistantId
-        streamingText = ""
-        task = Task { [store] in
-            var text = ""
-            var proposed = false
-            var lastFlush = Date.distantPast
+    private func run(_ prepared: PreparedAgentRun) {
+        let runId = prepared.run.id
+        currentRunId = runId
+        task = Task { [store, conversation, ledger] in
+            var status: AgentRunStatus = .failed
+            var errorText: String?
             do {
-                for try await event in provider.stream(system: system, turns: turns, tools: [Self.proposeExpense]) {
-                    switch event {
-                    case .text(let delta):
-                        text += delta
-                        streamingText = text
-                        onStreamingUpdate?(assistantId, text)
-                        if Date().timeIntervalSince(lastFlush) > 0.3 {
-                            try store.updateAssistantTurn(messageId: assistantId, text: text, status: .streaming)
-                            lastFlush = Date()
-                        }
-                    case .toolCall(let call) where call.name == Self.proposeExpense.name:
-                        try store.appendProposal(conversationId: conversation.id, payload: call.arguments)
-                        proposed = true
-                    case .toolCall:
-                        continue
-                    }
+                let settings = AgentSettings.load()
+                let prompt = try AgentContextBuilder.systemPrompt(store: store, ledger: ledger)
+                let cards = try store.agentProposalContext(conversationId: conversation.id)
+                let system = cards.isEmpty ? prompt : prompt + "\n\n现有记账卡片状态：\n" + cards
+                let config = try settings.configurationJSON(conversationId: conversation.id, systemPrompt: system, historyJSON: prepared.historyJSON)
+                let runtime = try PiAgentRuntime(configurationJSON: config) { [weak self] operation, payload in
+                    guard let self else { throw CancellationError() }
+                    return try await self.handle(operation: operation, payload: payload, runId: runId)
                 }
-                if proposed && text.isEmpty {
-                    try store.discardEmptyTurn(messageId: assistantId)
-                } else {
-                    try store.updateAssistantTurn(messageId: assistantId, text: text, status: .complete)
+                self.runtime = runtime
+                let result = try await runtime.run(id: runId.uuidString, inputJSON: prepared.inputJSON)
+                let outcome = try Self.object(result)
+                switch outcome["status"] as? String {
+                case "complete": status = .complete
+                case "aborted": status = .aborted
+                case "failed": errorText = outcome["error"] as? String ?? "Agent 运行失败"
+                default: throw ChatSessionError.invalidResponse
                 }
             } catch is CancellationError {
-                try? store.updateAssistantTurn(messageId: assistantId, text: text, status: text.isEmpty ? .failed : .complete, error: text.isEmpty ? "已停止" : nil)
-            } catch let AgentError.http(status, body) {
-                try? store.updateAssistantTurn(messageId: assistantId, text: text, status: .failed, error: "HTTP \(status): \(body.prefix(300))")
+                status = .aborted
             } catch {
-                try? store.updateAssistantTurn(messageId: assistantId, text: text, status: .failed, error: error.localizedDescription)
+                errorText = error.localizedDescription
             }
+            runtime?.close()
+            runtime = nil
+            if let activeTextId, !activeText.isEmpty {
+                try? store.updateAgentText(conversationId: conversation.id, runId: runId,
+                                           messageId: activeTextId, text: activeText)
+            }
+            do {
+                try store.finishAgentRun(conversationId: conversation.id, runId: runId, status: status, error: errorText)
+            } catch {
+                onRunError?("无法保存 Agent 运行结果：" + error.localizedDescription)
+            }
+            currentRunId = nil
             task = nil
+            activeTextId = nil
+            activeText = ""
             streamingMessageId = nil
+            toolStatus = nil
             onStreamingStateChange?()
         }
         onStreamingStateChange?()
+    }
+
+    private func handle(operation: String, payload: String, runId: UUID) throws -> String {
+        let value = try Self.object(payload)
+        guard value["conversationId"] as? String == conversation.id.uuidString,
+              value["runId"] as? String == runId.uuidString, currentRunId == runId else { throw AgentStoreError.staleRun }
+        switch operation {
+        case "checkpoint":
+            guard let entry = value["entry"] as? [String: Any], let id = entry["id"] as? String,
+                  let message = entry["message"] else { throw ChatSessionError.invalidResponse }
+            try store.checkpointAgentMessage(conversationId: conversation.id, runId: runId, id: id, payload: try Self.json(message))
+        case "tool":
+            guard value["name"] as? String == "propose_expense", let messageId = value["messageId"] as? String,
+                  let callId = value["toolCallId"] as? String, let arguments = value["arguments"] else {
+                throw ChatSessionError.invalidResponse
+            }
+            let execution = try store.executeAgentProposal(conversationId: conversation.id, runId: runId,
+                                                           assistantMessageId: messageId, toolCallId: callId,
+                                                           arguments: try Self.json(arguments))
+            if execution.isError { throw ChatSessionError.tool(execution.errorMessage ?? "工具执行失败") }
+            let result = try Self.object(execution.resultJSON)
+            return try Self.json(["content": result["content"] ?? [], "details": result["details"] ?? [:]])
+        case "event":
+            try handleEvent(value, runId: runId)
+        default: throw ChatSessionError.invalidResponse
+        }
+        return "null"
+    }
+
+    private func handleEvent(_ event: [String: Any], runId: UUID) throws {
+        switch event["type"] as? String {
+        case "text":
+            guard let id = event["messageId"] as? String, let delta = event["delta"] as? String,
+                  id.hasPrefix(runId.uuidString + ":") else { throw ChatSessionError.invalidResponse }
+            if activeTextId != id {
+                activeTextId = id
+                activeText = ""
+                lastFlush = .distantPast
+            }
+            activeText += delta
+            if Date().timeIntervalSince(lastFlush) > 0.3 {
+                try store.updateAgentText(conversationId: conversation.id, runId: runId, messageId: id, text: activeText)
+                lastFlush = Date()
+            }
+            if let message = try store.writer.read({ db in
+                try Message.filter(Column("conversationId") == conversation.id.uuidString && Column("agentMessageId") == id).fetchOne(db)
+            }) {
+                streamingMessageId = message.id
+                streamingText = activeText
+                onStreamingUpdate?(message.id, activeText)
+            }
+        case "message_end":
+            if let id = streamingMessageId {
+                streamingMessageId = nil
+                onStreamingUpdate?(id, activeText)
+            }
+        case "tool_start":
+            toolStatus = "正在生成记账卡片…"
+            onStreamingStateChange?()
+        case "tool_end":
+            toolStatus = nil
+            onStreamingStateChange?()
+        case "message_start", "settled": break
+        default: throw ChatSessionError.invalidResponse
+        }
+    }
+
+    private static func object(_ json: String) throws -> [String: Any] {
+        guard let value = try JSONSerialization.jsonObject(with: Data(json.utf8)) as? [String: Any] else {
+            throw ChatSessionError.invalidResponse
+        }
+        return value
+    }
+
+    private static func json(_ value: Any) throws -> String {
+        String(decoding: try JSONSerialization.data(withJSONObject: value, options: [.fragmentsAllowed]), as: UTF8.self)
+    }
+}
+
+private enum ChatSessionError: LocalizedError {
+    case notConfigured, invalidResponse, tool(String)
+    var errorDescription: String? {
+        switch self {
+        case .notConfigured: "未配置 AI 服务"
+        case .invalidResponse: "Agent 响应格式无效"
+        case .tool(let message): message
+        }
     }
 }

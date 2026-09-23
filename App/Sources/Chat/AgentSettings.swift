@@ -1,5 +1,5 @@
-import AgentClient
 import Foundation
+import LedgerDomain
 import Security
 
 enum AgentProviderKind: String, CaseIterable, Identifiable {
@@ -15,8 +15,8 @@ enum AgentProviderKind: String, CaseIterable, Identifiable {
 
     var defaultModel: String {
         switch self {
-        case .anthropic: AnthropicProvider.defaultModel
-        case .openai: OpenAICompatibleProvider.defaultModel
+        case .anthropic: "claude-opus-5"
+        case .openai: "gpt-4o"
         }
     }
 }
@@ -54,18 +54,25 @@ struct AgentSettings: Equatable {
         Keychain.write(apiKey, account: provider.rawValue)
     }
 
-    func makeProvider() -> (any AgentProvider)? {
-        #if DEBUG
-        if ScriptedAgentProvider.isEnabled { return ScriptedAgentProvider() }
-        #endif
-        guard !apiKey.isEmpty else { return nil }
-        switch provider {
-        case .anthropic:
-            return AnthropicProvider(apiKey: apiKey, model: model)
-        case .openai:
-            guard let url = URL(string: baseURL) else { return nil }
-            return OpenAICompatibleProvider(baseURL: url, apiKey: apiKey, model: model)
-        }
+    var isConfigured: Bool {
+        !apiKey.isEmpty && !model.isEmpty && (provider == .anthropic || URL(string: baseURL)?.host != nil)
+    }
+
+    func configurationJSON(conversationId: UUID, systemPrompt: String, historyJSON: String) throws -> String {
+        let history = try JSONSerialization.jsonObject(with: Data(historyJSON.utf8))
+        let schema = try JSONSerialization.jsonObject(with: Data(ExpenseProposal.inputSchema.utf8))
+        let api = provider == .anthropic ? "anthropic-messages" : "openai-completions"
+        let url = provider == .anthropic ? "https://api.anthropic.com" : baseURL
+        let config: [String: Any] = [
+            "conversationId": conversationId.uuidString, "systemPrompt": systemPrompt, "apiKey": apiKey,
+            "model": ["id": model, "name": model, "provider": provider.rawValue, "api": api, "baseUrl": url,
+                      "reasoning": false, "input": ["text"], "contextWindow": 200_000, "maxTokens": 16_000,
+                      "cost": ["input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0]],
+            "history": history,
+            "tools": [["name": "propose_expense", "label": "记账卡片",
+                       "description": "为一张账单生成一张待确认记账卡片；逐项目分摊时用 items，一次确认整张账单。", "parameters": schema]],
+        ]
+        return String(decoding: try JSONSerialization.data(withJSONObject: config), as: UTF8.self)
     }
 }
 

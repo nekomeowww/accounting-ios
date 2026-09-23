@@ -116,7 +116,12 @@ final class ChatViewController: UIViewController {
         let failed = UICollectionView.CellRegistration<UICollectionViewListCell, Message> { [unowned self] cell, _, message in
             cell.contentConfiguration = UIHostingConfiguration {
                 FailedMessageView(text: message.text, error: message.error ?? "失败") { [weak self] in
-                    try? self?.session.retry(message)
+                    do { try self?.session.retry(message) }
+                    catch {
+                        let alert = UIAlertController(title: "重试失败", message: error.localizedDescription, preferredStyle: .alert)
+                        alert.addAction(UIAlertAction(title: "好", style: .default))
+                        self?.present(alert, animated: true)
+                    }
                 }
             }
         }
@@ -137,14 +142,20 @@ final class ChatViewController: UIViewController {
     }
 
     private func bindSession() {
-        session.onStreamingUpdate = { [weak self] id, _ in
+        session.onStreamingUpdate = { [weak self] id, text in
             guard let self, let indexPath = dataSource.indexPath(for: id),
                   let cell = collectionView.cellForItem(at: indexPath) as? AssistantMessageCell else { return }
-            cell.configure(text: session.streamingText, streaming: true)
+            cell.configure(text: text, streaming: session.streamingMessageId == id)
         }
         session.onStreamingStateChange = { [weak self] in
             guard let self else { return }
             composer.isStreaming = session.isStreaming
+            composer.notice = session.toolStatus ?? (AgentSettings.load().isConfigured ? nil : "未配置 AI 服务，点击设置")
+        }
+        session.onRunError = { [weak self] message in
+            let alert = UIAlertController(title: "保存失败", message: message, preferredStyle: .alert)
+            alert.addAction(UIAlertAction(title: "好", style: .default))
+            self?.present(alert, animated: true)
         }
     }
 
@@ -286,7 +297,7 @@ final class ChatViewController: UIViewController {
 
     private func refreshProviderState() {
         let settings = AgentSettings.load()
-        let configured = settings.makeProvider() != nil
+        let configured = settings.isConfigured
         composer.notice = configured ? nil : "未配置 AI 服务，点击设置"
         composer.modelTitle = settings.model
         composer.isEnabled = configured

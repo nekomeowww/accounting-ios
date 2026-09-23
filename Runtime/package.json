@@ -1,0 +1,26 @@
+{
+  "name": "accounting-agent-runtime",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "node build.mjs",
+    "check": "tsc --noEmit",
+    "test": "node --experimental-strip-types --test test/*.test.ts",
+    "verify:jsc": "python3 verification/run.py"
+  },
+  "dependencies": {
+    "@earendil-works/pi-agent-core": "0.85.1",
+    "@earendil-works/pi-ai": "0.85.1",
+    "abort-controller": "3.0.0",
+    "blob-polyfill": "9.0.20240710",
+    "core-js": "3.48.0",
+    "formdata-polyfill": "4.0.10",
+    "web-streams-polyfill": "4.2.0",
+    "whatwg-fetch": "3.6.20"
+  },
+  "devDependencies": {
+    "@types/node": "24.10.1",
+    "esbuild": "0.25.12",
+    "typescript": "5.9.3"
+  }
+}

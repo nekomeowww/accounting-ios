@@ -24,6 +24,5 @@ let package = Package(
         .target(name: "AgentClient"),
         .testTarget(name: "LedgerDomainTests", dependencies: ["LedgerDomain"]),
         .testTarget(name: "LedgerPersistenceTests", dependencies: ["LedgerPersistence"]),
-        .testTarget(name: "AgentClientTests", dependencies: ["AgentClient"]),
     ]
 )

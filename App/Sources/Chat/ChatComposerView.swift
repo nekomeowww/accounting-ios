@@ -53,6 +53,7 @@ final class ChatComposerView: UIView, UITextViewDelegate {
         input.backgroundColor = .clear
         input.font = .systemFont(ofSize: 17)
         input.textColor = .label
+        input.autocorrectionType = .no
         input.delegate = self
         hint.text = "Ask Agent…"
         hint.font = input.font

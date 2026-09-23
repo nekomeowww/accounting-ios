@@ -4,11 +4,17 @@ import LedgerPersistence
 import SwiftUI
 
 struct ProposalPreview {
+    struct Line {
+        var name: String
+        var amount: Money
+        var consumers: [String]
+    }
+
     var merchant: String
     var total: Money
     var settled: Money?
     var payer: String
-    var consumers: [String]
+    var lines: [Line]
     var occurredAt: Date
     var category: String?
     var note: String?
@@ -19,6 +25,10 @@ struct ProposalPreview {
             let names = Dictionary(uniqueKeysWithValues: participants.map { ($0.id, $0.name) })
             let draft = try ExpenseProposal.decode(payload ?? "").draft(ledgerId: ledger.id, participants: participants.map { (id: $0.id, name: $0.name) })
             let total = Money(minor: draft.totalMinor, currency: draft.currency)
+            let lines = draft.lines.map { line in
+                Line(name: line.name, amount: Money(minor: line.amountMinor, currency: draft.currency),
+                     consumers: line.consumers.compactMap { names[$0.participantId] })
+            }
             let (settlement, rate) = try store.writer.read { db in
                 let settlement = try Ledger.fetchOne(db, key: ledger.id.uuidString)?.settlementCurrency ?? ledger.settlementCurrency
                 let rate = try LedgerStore.fetchRates(db, ledgerId: ledger.id).first { $0.currency == draft.currency }?.rate
@@ -29,7 +39,7 @@ struct ProposalPreview {
                 total: total,
                 settled: settlement != draft.currency ? rate.map { total.converted(to: settlement, rate: $0) } : nil,
                 payer: draft.payments.compactMap { names[$0.participantId] }.joined(separator: "、"),
-                consumers: draft.lines.flatMap(\.consumers).compactMap { names[$0.participantId] },
+                lines: lines,
                 occurredAt: draft.occurredAt,
                 category: draft.category,
                 note: draft.note
@@ -94,14 +104,38 @@ struct ProposalCardView: View {
             }
             Grid(alignment: .leading, horizontalSpacing: 12, verticalSpacing: 4) {
                 row("付款", preview.payer)
-                row("分摊", preview.consumers.count == 1 ? "\(preview.consumers[0]) 个人" : "\(preview.consumers.joined(separator: "、"))（\(preview.consumers.count) 人均分）")
+                if preview.lines.count == 1, let line = preview.lines.first {
+                    row("分摊", splitLabel(line.consumers))
+                }
                 row("时间", preview.occurredAt.formatted(date: .abbreviated, time: .shortened))
                 if let category = preview.category { row("分类", category) }
                 if let note = preview.note, !note.isEmpty { row("备注", note) }
             }
             .font(.subheadline)
+            if preview.lines.count > 1 {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("项目明细").font(.subheadline.weight(.semibold))
+                    ForEach(preview.lines.indices, id: \.self) { index in
+                        let line = preview.lines[index]
+                        VStack(alignment: .leading, spacing: 2) {
+                            HStack {
+                                Text(line.name)
+                                Spacer()
+                                Text(line.amount.formatted).monospacedDigit()
+                            }
+                            Text("分摊：\(splitLabel(line.consumers))")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                }
+            }
             placeRowContent
         }
+    }
+
+    private func splitLabel(_ consumers: [String]) -> String {
+        consumers.count == 1 ? "\(consumers[0]) 个人" : "\(consumers.joined(separator: "、"))（\(consumers.count) 人均分）"
     }
 
     @ViewBuilder

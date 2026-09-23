@@ -40,6 +40,8 @@ public struct Message: Hashable, Sendable, Codable, Identifiable, FetchableRecor
     public var payload: String?
     public var proposalState: ProposalState?
     public var expenseId: UUID?
+    public var agentRunId: UUID?
+    public var agentMessageId: String?
 
     public static func databaseUUIDEncodingStrategy(for column: String) -> DatabaseUUIDEncodingStrategy { .uppercaseString }
 }
@@ -100,7 +102,9 @@ extension LedgerStore {
     public func acceptProposal(messageId: UUID, ledgerId: UUID, timeZone: TimeZone = .current, place: Candidate? = nil) throws -> Expense {
         try writer.write { db in
             guard let message = try Message.fetchOne(db, key: messageId.uuidString), message.kind == .proposal,
-                  message.proposalState == .pending, let payload = message.payload else { throw ProposalError.notPending }
+                  message.proposalState == .pending, let payload = message.payload,
+                  let conversation = try Conversation.fetchOne(db, key: message.conversationId.uuidString),
+                  conversation.ledgerId == ledgerId else { throw ProposalError.notPending }
             let participants = try Participant
                 .filter(Column("ledgerId") == ledgerId.uuidString && Column("deletedAt") == nil)
                 .order(Column("createdAt"))
@@ -143,5 +147,6 @@ extension LedgerStore {
 
     static func failInterruptedStreams(_ db: Database) throws {
         try db.execute(sql: "UPDATE message SET status = 'failed', error = 'interrupted', updatedAt = ? WHERE status = 'streaming'", arguments: [Date()])
+        try db.execute(sql: "UPDATE agentRun SET status = 'interrupted', error = 'interrupted', updatedAt = ? WHERE status = 'running'", arguments: [Date()])
     }
 }
