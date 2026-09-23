@@ -101,11 +101,12 @@ final class ChatViewController: UIViewController {
         }
         let proposal = UICollectionView.CellRegistration<UICollectionViewListCell, Message> { [unowned self] cell, _, message in
             let preview = ProposalPreview.make(payload: message.payload, ledger: session.ledger, store: AppServices.store)
+            let occurredAt = (try? preview.get())?.occurredAt ?? message.createdAt
             cell.contentConfiguration = UIHostingConfiguration {
                 ProposalCardView(
                     state: message.proposalState ?? .dismissed,
                     preview: preview,
-                    placeRow: placeRow(for: message),
+                    placeRow: placeRow(for: message, occurredAt: occurredAt),
                     onAccept: { [weak self] in self?.accept(message) },
                     onDismiss: { [weak self] in self?.session.dismiss(message) },
                     onOpen: { [weak self] in self?.openExpense(message.expenseId) },
@@ -206,14 +207,14 @@ final class ChatViewController: UIViewController {
         return try? ExpenseProposal.decode(payload)
     }
 
-    private func placeRow(for message: Message) -> ProposalPlaceRow? {
+    private func placeRow(for message: Message, occurredAt: Date) -> ProposalPlaceRow? {
         if message.proposalState == .accepted {
             guard let expenseId = message.expenseId, let place = acceptedPlace(expenseId: expenseId) else { return nil }
             let name = [place.name, place.branch].compactMap { $0 }.joined(separator: " ")
             return .fixed(name: name, subtitle: place.address)
         }
         guard let hint = decodedProposal(message)?.place else { return nil }
-        startPlaceSearchIfNeeded(message: message, hint: hint)
+        startPlaceSearchIfNeeded(message: message, hint: hint, occurredAt: occurredAt)
         guard let (list, auto) = placeLookupResult(for: message, hint: hint) else { return .searching }
         if list.isEmpty { return .unresolved }
         if let auto { return .resolved(auto) }
@@ -241,11 +242,10 @@ final class ChatViewController: UIViewController {
         refreshPlaceRow(for: message.id)
     }
 
-    private func startPlaceSearchIfNeeded(message: Message, hint: PlaceHint) {
+    private func startPlaceSearchIfNeeded(message: Message, hint: PlaceHint, occurredAt: Date) {
         guard placeLookups[message.id] == nil else { return }
         placeLookups[message.id] = .searching
         let ledgerId = session.ledger.id
-        let occurredAt = message.createdAt
         Task { [weak self] in
             let results = await PlaceSearch.search(hint: hint, ledgerId: ledgerId, occurredAt: occurredAt)
             guard let self else { return }

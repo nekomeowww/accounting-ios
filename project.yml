@@ -51,6 +51,7 @@ targets:
                 UISceneDelegateClassName: $(PRODUCT_MODULE_NAME).SceneDelegate
         UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait]
         ITSAppUsesNonExemptEncryption: false
+        NSLocationWhenInUseUsageDescription: 用于在地图上定位消费地点。
     settings:
       base:
         TARGETED_DEVICE_FAMILY: 1
