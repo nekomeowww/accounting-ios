@@ -16,6 +16,7 @@ final class ActivityViewController: UIViewController {
     }
 
     private let ledger: Ledger
+    private let startOnMap: Bool
     private var rows: [UUID: ActivityRow] = [:]
     private var settlement = Settlement(currency: "", rows: [], missingRates: [])
     private var myParticipantId: UUID?
@@ -23,12 +24,16 @@ final class ActivityViewController: UIViewController {
     private var collectionView: UICollectionView!
     private var dataSource: UICollectionViewDiffableDataSource<Section, Item>!
     private let askButton = UIButton(configuration: .prominentGlass())
+    private let segmentedControl = UISegmentedControl(items: ["Activity", "Map"])
+    private var mapController: LedgerMapViewController!
 
-    init(ledger: Ledger) {
+    init(ledger: Ledger, startOnMap: Bool = false) {
         self.ledger = ledger
+        self.startOnMap = startOnMap
         super.init(nibName: nil, bundle: nil)
-        title = ledger.name
         navigationItem.largeTitleDisplayMode = .never
+        navigationItem.subtitle = ledger.name
+        navigationItem.backButtonTitle = ledger.name
         navigationItem.rightBarButtonItem = UIBarButtonItem(image: UIImage(systemName: "ellipsis"), primaryAction: UIAction { [weak self] _ in
             guard let self else { return }
             navigationController?.pushViewController(LedgerSettingsViewController(ledgerId: ledger.id), animated: true)
@@ -42,8 +47,14 @@ final class ActivityViewController: UIViewController {
         super.viewDidLoad()
         configureCollectionView()
         configureDataSource()
+        configureSegmentedControl()
+        configureMapController()
         loadMyParticipant()
         observe()
+        if startOnMap {
+            segmentedControl.selectedSegmentIndex = 1
+            segmentChanged()
+        }
     }
 
     override func viewWillAppear(_ animated: Bool) {
@@ -77,6 +88,42 @@ final class ActivityViewController: UIViewController {
         ])
         collectionView.contentInset.bottom = 72
         collectionView.verticalScrollIndicatorInsets.bottom = 72
+    }
+
+    private func configureSegmentedControl() {
+        segmentedControl.selectedSegmentIndex = 0
+        segmentedControl.accessibilityIdentifier = "activity-map-segment"
+        segmentedControl.addAction(UIAction { [weak self] _ in self?.segmentChanged() }, for: .valueChanged)
+        navigationItem.titleView = segmentedControl
+    }
+
+    private func configureMapController() {
+        let controller = LedgerMapViewController(ledgerId: ledger.id)
+        controller.onPreviewVisibilityChanged = { [weak self] visible in
+            self?.askButton.isHidden = visible
+        }
+        controller.onOpenExpense = { [weak self] id in
+            guard let self else { return }
+            navigationController?.pushViewController(ExpenseDetailViewController(expenseId: id, myParticipantId: myParticipantId), animated: true)
+        }
+        addChild(controller)
+        controller.view.translatesAutoresizingMaskIntoConstraints = false
+        controller.view.isHidden = true
+        view.insertSubview(controller.view, belowSubview: askButton)
+        NSLayoutConstraint.activate([
+            controller.view.topAnchor.constraint(equalTo: view.topAnchor),
+            controller.view.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+            controller.view.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+            controller.view.bottomAnchor.constraint(equalTo: view.bottomAnchor),
+        ])
+        controller.didMove(toParent: self)
+        mapController = controller
+    }
+
+    private func segmentChanged() {
+        let showMap = segmentedControl.selectedSegmentIndex == 1
+        mapController.view.isHidden = !showMap
+        askButton.isHidden = showMap && mapController.isPreviewVisible
     }
 
     private func openChat() {

@@ -106,4 +106,5 @@ import Testing
     #expect(pin.expenseCount == 2)
     #expect(pin.dominantCategory == "餐饮")
     #expect(pin.total == Money(minor: 15000, currency: "CNY"))
+    #expect(pin.expenses.allSatisfy { $0.payerNames == "innei" && $0.consumerCount == 1 })
 }

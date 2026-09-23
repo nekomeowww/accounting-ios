@@ -19,6 +19,7 @@ struct DebugView: View {
             }
             Section("页面") {
                 row("open-activity", "Activity", "list.bullet")
+                row("open-map", "Map", "map")
                 row("open-detail", "最近一笔消费详情", "doc.text.magnifyingglass")
                 row("open-ledger-settings", "账本设置 / 汇率", "gearshape")
                 row("open-chat", "Agent Chat", "sparkles")
@@ -105,6 +106,8 @@ final class DebugViewController: UIHostingController<DebugView> {
         switch id {
         case "open-activity":
             return ActivityViewController(ledger: fixtures.ledger)
+        case "open-map":
+            return ActivityViewController(ledger: fixtures.ledger, startOnMap: true)
         case "open-detail":
             guard let latest = try? store.writer.read({ try LedgerStore.fetchActivity($0, ledgerId: fixtures.ledger.id).first }) else { return nil }
             return ExpenseDetailViewController(expenseId: latest.id, myParticipantId: fixtures.me)

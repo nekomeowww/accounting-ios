@@ -10,6 +10,8 @@ public struct MapPin: Hashable, Sendable, Identifiable {
         public var timeZone: String
         public var currency: String
         public var totalMinor: Int64
+        public var payerNames: String
+        public var consumerCount: Int
     }
 
     public var place: Place
@@ -136,12 +138,19 @@ extension LedgerStore {
             var currency: String
             var expenseCategory: String?
             var totalMinor: Int64
+            var payerNames: String
+            var consumerCount: Int
         }
         let rows = try Row.fetchAll(db, sql: """
                 SELECT p.id AS placeId, p.name, p.branch, p.address, p.phone, p.category AS placeCategory,
                   p.latitude, p.longitude, p.provider, p.providerId, p.createdAt, p.updatedAt,
                   e.id AS expenseId, e.merchant, e.occurredAt, e.timeZone, e.currency, e.category AS expenseCategory,
-                  (SELECT COALESCE(SUM(amountMinor), 0) FROM expenseLine WHERE expenseId = e.id) AS totalMinor
+                  (SELECT COALESCE(SUM(amountMinor), 0) FROM expenseLine WHERE expenseId = e.id) AS totalMinor,
+                  (SELECT COALESCE(group_concat(pt.name, ', '), '') FROM expensePayment ep
+                     JOIN participant pt ON pt.id = ep.participantId WHERE ep.expenseId = e.id) AS payerNames,
+                  (SELECT COUNT(DISTINCT lc.participantId) FROM lineConsumer lc
+                     JOIN expenseLine l ON l.id = lc.lineId
+                     WHERE l.expenseId = e.id AND (lc.weight > 0 OR lc.exactMinor > 0)) AS consumerCount
                 FROM place p
                 JOIN expense e ON e.placeId = p.id AND e.deletedAt IS NULL
                 WHERE p.ledgerId = ?
@@ -168,7 +177,8 @@ extension LedgerStore {
             }
             expensesByPlace[row.placeId, default: []].append(MapPin.ExpenseRef(
                 expenseId: row.expenseId, merchant: row.merchant, occurredAt: row.occurredAt,
-                timeZone: row.timeZone, currency: row.currency, totalMinor: row.totalMinor
+                timeZone: row.timeZone, currency: row.currency, totalMinor: row.totalMinor,
+                payerNames: row.payerNames, consumerCount: row.consumerCount
             ))
             if let category = row.expenseCategory {
                 categoryCounts[row.placeId, default: [:]][category, default: 0] += 1

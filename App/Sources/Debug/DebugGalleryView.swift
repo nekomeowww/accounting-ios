@@ -9,6 +9,7 @@ enum DebugGallery: String, CaseIterable, Identifiable {
     case expenseRow = "gallery-expense-row"
     case proposal = "gallery-proposal"
     case chat = "gallery-chat"
+    case mapPreview = "gallery-map-preview"
 
     var id: String { rawValue }
 
@@ -18,6 +19,7 @@ enum DebugGallery: String, CaseIterable, Identifiable {
         case .expenseRow: "消费行"
         case .proposal: "记账卡片"
         case .chat: "聊天气泡"
+        case .mapPreview: "地图预览卡片"
         }
     }
 
@@ -27,6 +29,7 @@ enum DebugGallery: String, CaseIterable, Identifiable {
         case .expenseRow: "list.bullet.rectangle"
         case .proposal: "square.and.pencil"
         case .chat: "bubble.left.and.bubble.right"
+        case .mapPreview: "map"
         }
     }
 }
@@ -88,6 +91,21 @@ struct DebugGalleryView: View {
                 FailedMessageView(text: "", error: "HTTP 401: invalid api key", onRetry: {})
                 FailedMessageView(text: "已经输出的一部分内容……", error: "已停止", onRetry: {})
             }
+        case .mapPreview:
+            if let single = f.mapPins.first(where: { $0.expenses.count == 1 }) {
+                Section("单笔") {
+                    MapPreviewCard(pin: single, settlementCurrency: f.ledger.settlementCurrency, rates: f.rates, onSelectExpense: { _ in })
+                        .listRowInsets(EdgeInsets())
+                        .listRowBackground(Color.clear)
+                }
+            }
+            if let multi = f.mapPins.first(where: { $0.expenses.count > 1 }) {
+                Section("多笔") {
+                    MapPreviewCard(pin: multi, settlementCurrency: f.ledger.settlementCurrency, rates: f.rates, onSelectExpense: { _ in })
+                        .listRowInsets(EdgeInsets())
+                        .listRowBackground(Color.clear)
+                }
+            }
         }
     }
 }
@@ -98,6 +116,8 @@ struct DebugFixtures {
     var settlement: Settlement
     var rows: [ActivityRow]
     var names: [String]
+    var mapPins: [LedgerPersistence.MapPin]
+    var rates: [String: Decimal]
 
     static func load(store: LedgerStore) -> DebugFixtures? {
         try? store.writer.read { db in
@@ -110,7 +130,12 @@ struct DebugFixtures {
                 activity.first { $0.currency != ledger.defaultCurrency },
             ].compactMap { $0 }
             let names = try Participant.filter(Column("ledgerId") == ledger.id.uuidString).order(Column("createdAt")).fetchAll(db).map(\.name)
-            return DebugFixtures(ledger: ledger, me: me, settlement: try LedgerStore.fetchSettlement(db, ledgerId: ledger.id), rows: picks, names: names)
+            let mapPins = try LedgerStore.fetchMapPins(db, ledgerId: ledger.id)
+            let rates = Dictionary(uniqueKeysWithValues: try LedgerStore.fetchRates(db, ledgerId: ledger.id).map { ($0.currency, $0.rate) })
+            return DebugFixtures(
+                ledger: ledger, me: me, settlement: try LedgerStore.fetchSettlement(db, ledgerId: ledger.id), rows: picks, names: names,
+                mapPins: mapPins, rates: rates
+            )
         }
     }
 
