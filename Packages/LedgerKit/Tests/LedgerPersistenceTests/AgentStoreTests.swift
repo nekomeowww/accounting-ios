@@ -11,9 +11,9 @@ private func json(_ value: Any) throws -> String {
 private func object(_ text: String) throws -> [String: Any] {
     try JSONSerialization.jsonObject(with: Data(text.utf8)) as! [String: Any]
 }
-private func assistant(_ args: [String] = [], text: String = "", stop: String = "toolUse") throws -> String {
+private func assistant(_ args: [String] = [], text: String = "", stop: String = "toolUse", tool: String = "propose_expense") throws -> String {
     var content: [[String: Any]] = text.isEmpty ? [] : [["type": "text", "text": text]]
-    content += try args.enumerated().map { ["type": "toolCall", "id": "call-\($0.offset)", "name": "propose_expense", "arguments": try object($0.element)] }
+    content += try args.enumerated().map { ["type": "toolCall", "id": "call-\($0.offset)", "name": tool, "arguments": try object($0.element)] }
     return try json(["role": "assistant", "content": content, "api": "openai-completions", "provider": "openai", "model": "fixture",
                      "stopReason": stop, "timestamp": 1,
                      "usage": ["input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0, "totalTokens": 0,
@@ -235,4 +235,29 @@ private func tool(_ store: LedgerStore, _ prepared: PreparedAgentRun, index: Int
     let next = try reopened.beginAgentRun(conversationId: conversation.id, text: "next")
     #expect(try reopened.agentTranscript(conversationId: conversation.id).count == 6)
     #expect(next.historyJSON.contains("old answer"))
+}
+
+@Test func repaymentToolCreatesCardAndAcceptRecordsTransfer() throws {
+    let store = try LedgerStore.inMemory()
+    let (ledger, conversation, prepared) = try setup(store)
+    _ = try store.addParticipant(ledgerId: ledger, name: "whitewater")
+    let args = #"{"from":"me","to":"whitewater","amount":"20","currency":"USD","note":"微信"}"#
+    try store.checkpointAgentMessage(conversationId: conversation, runId: prepared.run.id,
+                                    id: prepared.run.id.uuidString + ":1", payload: assistant([args], tool: "propose_repayment"))
+    let card = try #require(try tool(store, prepared, args: args).proposalId)
+    #expect(try store.writer.read { try Message.fetchOne($0, key: card.uuidString)?.kind } == .repayment)
+    #expect(try store.writer.read { try LedgerStore.fetchBalances($0, ledgerId: ledger) }.isEmpty)
+
+    try store.acceptRepayment(messageId: card, ledgerId: ledger)
+    let net = Dictionary(uniqueKeysWithValues: try store.writer.read { try LedgerStore.fetchBalances($0, ledgerId: ledger) }.map { ($0.participantName, $0.netMinor) })
+    #expect(net == ["me": 2000, "whitewater": -2000])
+    #expect(throws: ProposalError.notPending) { try store.acceptRepayment(messageId: card, ledgerId: ledger) }
+
+    #expect(try tool(store, prepared, args: args).proposalId == card)
+}
+
+@Test func repaymentRejectsSamePerson() throws {
+    #expect(throws: ProposalError.samePerson) {
+        try RepaymentProposal.decode(#"{"from":"a","to":"A","amount":"1","currency":"USD"}"#).resolve(participants: [(UUID(), "a")])
+    }
 }

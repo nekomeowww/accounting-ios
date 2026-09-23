@@ -20,7 +20,7 @@ public enum MessageStatus: String, Sendable, Codable {
 }
 
 public enum MessageKind: String, Sendable, Codable {
-    case text, proposal
+    case text, proposal, repayment
 }
 
 public enum ProposalState: String, Sendable, Codable {
@@ -127,6 +127,20 @@ extension LedgerStore {
                 arguments: [expense.id.uuidString, Date(), messageId.uuidString]
             )
             return expense
+        }
+    }
+
+    public func acceptRepayment(messageId: UUID, ledgerId: UUID) throws {
+        try writer.write { db in
+            guard let message = try Message.fetchOne(db, key: messageId.uuidString), message.kind == .repayment,
+                  message.proposalState == .pending, let payload = message.payload,
+                  let conversation = try Conversation.fetchOne(db, key: message.conversationId.uuidString),
+                  conversation.ledgerId == ledgerId else { throw ProposalError.notPending }
+            let participants = try Participant.filter(Column("ledgerId") == ledgerId.uuidString && Column("deletedAt") == nil).fetchAll(db)
+            let resolved = try RepaymentProposal.decode(payload).resolve(participants: participants.map { ($0.id, $0.name) })
+            try Self.insertTransfer(db, ledgerId: ledgerId, from: resolved.from, to: resolved.to, amount: resolved.amount,
+                                    occurredAt: message.createdAt, note: resolved.note, actorId: actorId)
+            try db.execute(sql: "UPDATE message SET proposalState = 'accepted', updatedAt = ? WHERE id = ?", arguments: [Date(), messageId.uuidString])
         }
     }
 

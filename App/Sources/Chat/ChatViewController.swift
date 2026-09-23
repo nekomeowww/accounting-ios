@@ -113,6 +113,16 @@ final class ChatViewController: UIViewController {
                 )
             }
         }
+        let repayment = UICollectionView.CellRegistration<UICollectionViewListCell, Message> { [unowned self] cell, _, message in
+            let participants = (try? AppServices.store.participants(ledgerId: session.ledger.id)) ?? []
+            let resolved = Result { try RepaymentProposal.decode(message.payload ?? "").resolve(participants: participants.map { ($0.id, $0.name) }) }
+            let names = Dictionary(uniqueKeysWithValues: participants.map { ($0.id, $0.name) })
+            cell.contentConfiguration = UIHostingConfiguration {
+                RepaymentCardView(state: message.proposalState ?? .dismissed, repayment: resolved, names: names,
+                                  onAccept: { [weak self] in self?.accept(message) },
+                                  onDismiss: { [weak self] in self?.session.dismiss(message) })
+            }
+        }
         let failed = UICollectionView.CellRegistration<UICollectionViewListCell, Message> { [unowned self] cell, _, message in
             cell.contentConfiguration = UIHostingConfiguration {
                 FailedMessageView(text: message.text, error: message.error ?? "失败") { [weak self] in
@@ -129,6 +139,9 @@ final class ChatViewController: UIViewController {
             guard let message = messages[id] else { return UICollectionViewCell() }
             if message.kind == .proposal {
                 return collectionView.dequeueConfiguredReusableCell(using: proposal, for: indexPath, item: message)
+            }
+            if message.kind == .repayment {
+                return collectionView.dequeueConfiguredReusableCell(using: repayment, for: indexPath, item: message)
             }
             switch (message.role, message.status) {
             case (.user, _):
@@ -191,6 +204,7 @@ final class ChatViewController: UIViewController {
 
     private func cellKind(_ message: Message) -> Int {
         if message.kind == .proposal { return 3 }
+        if message.kind == .repayment { return 4 }
         return switch (message.role, message.status) {
         case (.user, _): 0
         case (.assistant, .failed): 1

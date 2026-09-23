@@ -152,7 +152,7 @@ extension LedgerStore {
             guard let source = try Self.transcript(db, conversationId).first(where: { $0.id == assistantMessageId }),
                   source.runId == runId, !AgentJSON.incomplete(try AgentJSON.object(source.payload)),
                   let call = try AgentJSON.calls(source.payload).first(where: { $0.id == toolCallId }),
-                  call.name == "propose_expense", call.arguments == canonical else { throw AgentStoreError.identityConflict }
+                  Self.cardTools.contains(call.name), call.arguments == canonical else { throw AgentStoreError.identityConflict }
             return try Self.performProposal(db, conversationId, source.id, call, actorId: actorId, timeZone: timeZone)
         }
     }
@@ -227,7 +227,7 @@ extension LedgerStore {
     /// Added to the next system context; original tool results remain immutable.
     public func agentProposalContext(conversationId: UUID) throws -> String {
         try writer.read { db in
-            let proposals = try Message.filter(Column("conversationId") == conversationId.uuidString && Column("kind") == "proposal")
+            let proposals = try Message.filter(Column("conversationId") == conversationId.uuidString && ["proposal", "repayment"].contains(Column("kind")))
                 .order(Column("createdAt")).fetchAll(db)
             return proposals.map { "卡片 \($0.id.uuidString)：\($0.proposalState?.rawValue ?? "pending")；\($0.payload ?? "")" }.joined(separator: "\n")
         }
@@ -295,6 +295,8 @@ extension LedgerStore {
                        arguments: [conversationId.uuidString, source, call.id, call.name, call.arguments, result, proposalId?.uuidString, Date()])
     }
 
+    public static let cardTools: Set<String> = ["propose_expense", "propose_repayment"]
+
     private static func performProposal(_ db: Database, _ conversationId: UUID, _ source: String, _ call: AgentJSON.Call, actorId: UUID, timeZone: TimeZone) throws -> AgentToolExecution {
         if let existing = try execution(db, conversationId, source, call.id) { return existing }
         guard let next = try pendingCalls(contextEntries(transcript(db, conversationId))).first,
@@ -303,19 +305,24 @@ extension LedgerStore {
         let now = Date()
         var proposalId: UUID?
         var errorText: String?
+        let kind: MessageKind = call.name == "propose_repayment" ? .repayment : .proposal
         // Only domain failures become durable tool errors. SQL/storage failures must abort the entire transaction.
         do {
-            guard call.name == "propose_expense" else { throw ProposalError.malformed }
+            guard cardTools.contains(call.name) else { throw ProposalError.malformed }
             let participants = try Participant.filter(Column("ledgerId") == conversation.ledgerId.uuidString && Column("deletedAt") == nil).fetchAll(db)
-            let draft = try ExpenseProposal.decode(call.arguments).draft(ledgerId: conversation.ledgerId, participants: participants.map { ($0.id, $0.name) }, now: now, timeZone: timeZone)
-            _ = try ExpenseBuilder.build(draft, ledgerParticipantIds: Set(participants.map(\.id)), actorId: actorId, now: now)
+            if kind == .repayment {
+                _ = try RepaymentProposal.decode(call.arguments).resolve(participants: participants.map { ($0.id, $0.name) })
+            } else {
+                let draft = try ExpenseProposal.decode(call.arguments).draft(ledgerId: conversation.ledgerId, participants: participants.map { ($0.id, $0.name) }, now: now, timeZone: timeZone)
+                _ = try ExpenseBuilder.build(draft, ledgerParticipantIds: Set(participants.map(\.id)), actorId: actorId, now: now)
+            }
             proposalId = UUID()
         } catch let error as ProposalError { errorText = error.localizedDescription }
         catch let error as DomainError { errorText = String(describing: error) }
         let text: String
         if let proposalId {
             let proposal = Message(id: proposalId, conversationId: conversationId, role: .assistant, text: "", status: .complete,
-                                   createdAt: now, updatedAt: now, kind: .proposal, payload: call.arguments, proposalState: .pending)
+                                   createdAt: now, updatedAt: now, kind: kind, payload: call.arguments, proposalState: .pending)
             try proposal.insert(db)
             text = try AgentJSON.encode(["proposalId": proposalId.uuidString, "status": "pending_confirmation"])
         } else { text = errorText ?? "工具参数无效" }
@@ -352,7 +359,7 @@ extension LedgerStore {
         let messages = try Message.filter(Column("conversationId") == conversationId.uuidString && Column("status") == "complete")
             .order(Column("createdAt"), Column("id")).fetchAll(db)
         for message in messages {
-            let text = message.kind == .proposal
+            let text = message.kind != .text
                 ? "（历史记账卡片：\(message.payload ?? "")；状态：\(message.proposalState?.rawValue ?? "pending")）" : message.text
             var payload: [String: Any] = ["role": message.role.rawValue, "content": text, "timestamp": message.createdAt.timeIntervalSince1970 * 1000]
             if message.role == .assistant {

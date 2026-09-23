@@ -66,6 +66,7 @@ struct AgentSettings: Equatable {
     func configurationJSON(conversationId: UUID, systemPrompt: String, historyJSON: String) throws -> String {
         let history = try JSONSerialization.jsonObject(with: Data(historyJSON.utf8))
         let schema = try JSONSerialization.jsonObject(with: Data(ExpenseProposal.inputSchema.utf8))
+        let repaymentSchema = try JSONSerialization.jsonObject(with: Data(RepaymentProposal.inputSchema.utf8))
         let api = provider == .anthropic ? "anthropic-messages" : "openai-completions"
         let url = provider == .anthropic ? "https://api.anthropic.com" : baseURL
         let config: [String: Any] = [
@@ -76,7 +77,9 @@ struct AgentSettings: Equatable {
                       "cost": ["input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0]],
             "history": history,
             "tools": [["name": "propose_expense", "label": "记账卡片",
-                       "description": "为一张账单生成一张待确认记账卡片；逐项目分摊时用 items，一次确认整张账单。", "parameters": schema]],
+                       "description": "为一张账单生成一张待确认记账卡片；逐项目分摊时用 items，按指定金额分摊时用 shares，一次确认整张账单。", "parameters": schema],
+                      ["name": "propose_repayment", "label": "还款卡片",
+                       "description": "成员之间直接转账还钱（不是消费）时，生成一张待确认还款卡片。", "parameters": repaymentSchema]],
         ]
         return String(decoding: try JSONSerialization.data(withJSONObject: config), as: UTF8.self)
     }

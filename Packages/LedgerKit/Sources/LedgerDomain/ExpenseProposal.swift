@@ -172,6 +172,7 @@ public enum ProposalError: Error, Equatable, Sendable, LocalizedError {
     case emptyItemName
     case itemTotalMismatch
     case shareTotalMismatch
+    case samePerson
     case notPending
 
     public var errorDescription: String? {
@@ -185,6 +186,7 @@ public enum ProposalError: Error, Equatable, Sendable, LocalizedError {
         case .emptyItemName: "项目名称不能为空"
         case .itemTotalMismatch: "项目金额合计与账单总额不符"
         case .shareTotalMismatch: "每人金额合计与账单总额不符，或成员重复"
+        case .samePerson: "付款人和收款人不能是同一人"
         case .notPending: "这张卡片已处理"
         }
     }

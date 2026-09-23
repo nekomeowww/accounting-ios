@@ -23,6 +23,7 @@ enum AgentContextBuilder {
         lines.append("你是账本「\(ledger.name)」的记账助手。只根据下面给出的信息回答用户关于这个账本的问题，用简洁的中文。")
         lines.append("用户要记一笔新消费时，调用 propose_expense 生成记账卡片，由用户确认后才写入。卡片出现后不要声称已经记账。")
         lines.append("同一张账单只调用一次 propose_expense；有多个项目或各项目承担人不同时，填写 items，逐项写金额与承担人，amount 写项目合计。不要拆成多张卡片。")
+        lines.append("成员之间转账还钱（如「我把钱转给白水了」）不是消费，调用 propose_repayment；没说金额时可按余额里的结清方式建议金额，但要在回复中说明。")
         lines.append("金额或付款人不清楚时先追问，不要猜；币种没说就用默认币种；不要编造抹零或额外费用。成员名必须用下面列出的名字。")
         if let myName {
             lines.append("正在和你对话的用户是成员「\(myName)」，用户说的「我」指这个成员。")

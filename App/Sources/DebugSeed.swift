@@ -57,6 +57,7 @@ enum DebugSeed {
             var method: String? = nil
             var category: String? = nil
             var place: Candidate? = nil
+            var lines: [LineDraft]? = nil
         }
 
         let shared: [Row] = [
@@ -76,22 +77,33 @@ enum DebugSeed {
             Row(date: date(9, 22, 12), merchant: "新潟カツ丼タレカツ 京都本店", payer: innei, amount: 1950, currency: "JPY", consumers: two, note: "猪排饭，与白水 2人分", category: "餐饮", place: seedPlace("tarekatsu", "新潟カツ丼 タレカツ 京都本店", 35.0065, 135.7678, category: "餐饮")),
             Row(date: date(9, 21, 12, 43), merchant: "新干线 热海→京都", payer: neko, amount: 49960, currency: "JPY", consumers: four, note: "こだま823 熱海12:43発 + のぞみ259 名古屋14:41発", category: "交通", place: seedPlace("atami-station", "新幹線 熱海駅", 35.1037, 139.0778, category: "交通")),
             Row(date: date(9, 17, 15), merchant: "teamLab Planets TOKYO", payer: neko, amount: 18400, currency: "JPY", consumers: four, note: "neko 信用卡垫付", method: "card", category: "门票", place: seedPlace("teamlab-planets", "teamLab Planets TOKYO", 35.6491, 139.7898, category: "门票")),
+            Row(date: date(9, 23, 12), merchant: "北極星 四条河原町店", payer: innei, amount: 4190, currency: "JPY", consumers: two, note: "カレーオムライス+ビーフオムライス+エビフライセット+フルーツミックスアイス；现金¥10,200 找零¥6,010", method: "cash", category: "餐饮"),
+            Row(date: date(9, 23, 10), merchant: "白狐守", payer: innei, amount: 2000, currency: "JPY", consumers: two, note: "御守 2 个，各 ¥1,000", category: "购物"),
+            Row(date: date(9, 23, 11), merchant: "伏見稲荷 参道茶屋", payer: innei, amount: 2620, currency: "JPY", consumers: [], note: "手写小票；innei 现金垫付", method: "cash", category: "餐饮",
+                lines: [LineDraft(name: "そば", amountMinor: 1600, consumers: [ConsumerDraft(whitewater.id)]),
+                        LineDraft(name: "抹茶ミルク金時", amountMinor: 1020, consumers: [ConsumerDraft(innei.id)])]),
+            Row(date: date(9, 23, 19), merchant: "麵屋優光", payer: innei, amount: 2580, currency: "JPY", consumers: [], note: "晚上吃面；innei 垫付整单", category: "餐饮",
+                lines: [LineDraft(name: "鶏白湯らーめん", amountMinor: 1250, consumers: [ConsumerDraft(innei.id)]),
+                        LineDraft(name: "淡竹", amountMinor: 900, consumers: [ConsumerDraft(whitewater.id)]),
+                        LineDraft(name: "餃子", amountMinor: 430, consumers: two)]),
         ]
 
         let mine = [ConsumerDraft(innei.id)]
         let personal: [Row] = [
-            Row(date: date(9, 19, 9), merchant: "Lawson", payer: innei, amount: 1204, currency: "JPY", consumers: mine, category: "便利店", place: seedPlace("lawson-ito", "Lawson", 34.9660, 139.1020, category: "便利店")),
+            Row(date: date(9, 19, 9), merchant: "Lawson", payer: innei, amount: 1204, currency: "JPY", consumers: mine, category: "餐饮", place: seedPlace("lawson-ito", "Lawson", 34.9660, 139.1020, category: "餐饮")),
             Row(date: date(9, 20, 12), merchant: "KFC 伊东Duo店", payer: innei, amount: 1190, currency: "JPY", consumers: mine, note: "一人食午餐", category: "餐饮", place: seedPlace("kfc-ito-duo", "KFC 伊東デュオ店", 34.9681, 139.0986, category: "餐饮")),
-            Row(date: date(9, 20, 16), merchant: "7-Eleven 伊豆白田店", payer: innei, amount: 338, currency: "JPY", consumers: mine, category: "便利店", place: seedPlace("711-shirata", "7-Eleven 伊豆白田店", 34.8455, 139.1178, category: "便利店")),
-            Row(date: date(9, 21, 16), merchant: "热海布丁 加购", payer: innei, amount: 600, currency: "JPY", consumers: mine, note: "追加一份布丁", category: "餐饮", place: seedPlace("atami-purin", "熱海プリン", 35.1025, 139.0758, category: "餐饮")),
+            Row(date: date(9, 20, 16), merchant: "7-Eleven 伊豆白田店", payer: innei, amount: 338, currency: "JPY", consumers: mine, category: "餐饮", place: seedPlace("711-shirata", "7-Eleven 伊豆白田店", 34.8455, 139.1178, category: "餐饮")),
             Row(date: date(9, 21, 11), merchant: "麦当劳 热海站前店", payer: innei, amount: 1110, currency: "JPY", consumers: mine, note: "月见汉堡套餐+炸虾块", category: "餐饮", place: seedPlace("mcdonalds-atami", "マクドナルド 熱海駅前店", 35.1033, 139.0770, category: "餐饮")),
             Row(date: date(9, 22, 14), merchant: "京都 IP書店", payer: innei, amount: 2090, currency: "JPY", consumers: mine, note: "サンリオ和ごころ 990 + しぐれうい御守り風アクリル 1,100", category: "购物", place: seedPlace("kyoto-ip-books", "京都 IP書店", 35.0040, 135.7688, category: "购物")),
             Row(date: date(9, 22, 15), merchant: "高島屋 京都", payer: innei, amount: 1804, currency: "JPY", consumers: mine, note: "カードラッピング 500+520 + クリスマスカード 620", category: "购物", place: seedPlace("takashimaya-kyoto", "高島屋 京都店", 35.0035, 135.7690, phone: "075-221-8811", category: "购物")),
             Row(date: date(9, 22, 12, 30), merchant: "麺や 鳥の鶏次 KYOTO 四条河原町店", payer: innei, amount: 1360, currency: "JPY", consumers: mine, note: "鶏白湯ラーメン 午餐", category: "餐饮", place: seedPlace("torinokeiji", "麺や 鳥の鶏次 KYOTO 四条河原町店", 35.0045, 135.7695, category: "餐饮")),
-            Row(date: date(9, 22, 16), merchant: "マツモトキヨシ 京都四条河原町店", payer: innei, amount: 1389, currency: "JPY", consumers: mine, note: "オフテクス ティアージェW 657 + ソフトサンティア 627 + キレートレモン 105", category: "药妆", place: seedPlace("matsukiyo-kyoto", "マツモトキヨシ 京都四条河原町店", 35.0038, 135.7686, phone: "075-253-6160", category: "药妆")),
+            Row(date: date(9, 22, 16), merchant: "マツモトキヨシ 京都四条河原町店", payer: innei, amount: 1389, currency: "JPY", consumers: mine, note: "オフテクス ティアージェW 657 + ソフトサンティア 627 + キレートレモン 105", category: "购物", place: seedPlace("matsukiyo-kyoto", "マツモトキヨシ 京都四条河原町店", 35.0038, 135.7686, phone: "075-253-6160", category: "购物")),
             Row(date: date(9, 22, 17), merchant: "京都まるん 祇園店", payer: innei, amount: 660, currency: "JPY", consumers: mine, note: "ピンズ 1点，含税10%", category: "购物", place: seedPlace("kyoto-marun", "京都まるん 祇園店", 35.0037, 135.7751, address: "〒605-0073 京都市東山区祇園町北側244", category: "购物")),
-            Row(date: date(9, 22, 17, 30), merchant: "なわーど ラッシュ", payer: innei, amount: 540, currency: "JPY", consumers: mine, note: "レモン風味（果汁1%・ガラス瓶）", category: "饮料"),
+            Row(date: date(9, 22, 17, 30), merchant: "なわーど ラッシュ", payer: innei, amount: 540, currency: "JPY", consumers: mine, note: "レモン風味（果汁1%・ガラス瓶）", category: "餐饮"),
             Row(date: date(9, 22, 18), merchant: "ごちそう焼むすび おにまる 京都四条河原町店", payer: innei, amount: 1703, currency: "CNY", consumers: mine, note: "焼むすび，支付宝实付", original: Money(minor: 399, currency: "JPY"), method: "alipay", category: "餐饮", place: seedPlace("onimaru", "ごちそう焼むすび おにまる 京都四条河原町店", 35.0031, 135.7679, category: "餐饮")),
+            Row(date: date(9, 23, 9), merchant: "ダイコクドラッグ 伏見稲荷参道店", payer: innei, amount: 85, currency: "JPY", consumers: mine, note: "メンソレータム 薬用リップ スティックXD，¥78+税", category: "购物"),
+            Row(date: date(9, 15, 12), endsAt: date(9, 24, 12), merchant: "Suica 充值", payer: innei, amount: 8000, currency: "JPY", consumers: mine, note: "本次日本行程本地交通，地铁/巴士", category: "交通"),
+            Row(date: date(9, 23, 15), merchant: "モンベル トレッキング サンブロック アンブレラ 55", payer: innei, amount: 6380, currency: "JPY", consumers: mine, note: "折りたたみ傘，SV シルバー，品番 1128560", category: "购物"),
             Row(date: date(9, 22, 18, 30), merchant: "Sanrio Gallery 京都店", payer: innei, amount: 1100, currency: "JPY", consumers: mine, note: "サンリオ グッズ，含税10%", category: "购物", place: seedPlace("sanrio-kyoto", "Sanrio Gallery 京都店", 35.0033, 135.7672, phone: "075-229-6955", category: "购物")),
         ]
 
@@ -99,7 +111,7 @@ enum DebugSeed {
             let expense = try store.createExpense(ExpenseDraft(
                 ledgerId: ledger.id, merchant: row.merchant, note: row.note, category: row.category,
                 occurredAt: row.date, endsAt: row.endsAt, timeZone: tokyo.identifier, currency: row.currency, original: row.original,
-                lines: [LineDraft(name: row.merchant, amountMinor: row.amount, consumers: row.consumers)],
+                lines: row.lines ?? [LineDraft(name: row.merchant, amountMinor: row.amount, consumers: row.consumers)],
                 payments: [PaymentDraft(row.payer.id, amountMinor: row.amount, method: row.method)]
             ))
             if let place = row.place {

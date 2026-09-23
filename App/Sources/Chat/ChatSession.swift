@@ -57,6 +57,7 @@ final class ChatSession {
     }
 
     func accept(_ proposal: Message, place: Candidate? = nil) throws {
+        if proposal.kind == .repayment { return try store.acceptRepayment(messageId: proposal.id, ledgerId: ledger.id) }
         try store.acceptProposal(messageId: proposal.id, ledgerId: ledger.id, place: place)
     }
 
@@ -128,7 +129,7 @@ final class ChatSession {
                   let message = entry["message"] else { throw ChatSessionError.invalidResponse }
             try store.checkpointAgentMessage(conversationId: conversation.id, runId: runId, id: id, payload: try Self.json(message))
         case "tool":
-            guard value["name"] as? String == "propose_expense", let messageId = value["messageId"] as? String,
+            guard let name = value["name"] as? String, LedgerStore.cardTools.contains(name), let messageId = value["messageId"] as? String,
                   let callId = value["toolCallId"] as? String, let arguments = value["arguments"] else {
                 throw ChatSessionError.invalidResponse
             }
