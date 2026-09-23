@@ -17,6 +17,7 @@ final class ActivityViewController: UIViewController {
 
     private let ledger: Ledger
     private let startOnMap: Bool
+    private let initialPlaceId: UUID?
     private var rows: [UUID: ActivityRow] = [:]
     private var settlement = Settlement(currency: "", rows: [], missingRates: [])
     private var myParticipantId: UUID?
@@ -27,9 +28,10 @@ final class ActivityViewController: UIViewController {
     private let segmentedControl = UISegmentedControl(items: ["Activity", "Map"])
     private var mapController: LedgerMapViewController!
 
-    init(ledger: Ledger, startOnMap: Bool = false) {
+    init(ledger: Ledger, startOnMap: Bool = false, initialPlaceId: UUID? = nil) {
         self.ledger = ledger
-        self.startOnMap = startOnMap
+        self.startOnMap = startOnMap || initialPlaceId != nil
+        self.initialPlaceId = initialPlaceId
         super.init(nibName: nil, bundle: nil)
         navigationItem.largeTitleDisplayMode = .never
         navigationItem.subtitle = ledger.name
@@ -98,7 +100,7 @@ final class ActivityViewController: UIViewController {
     }
 
     private func configureMapController() {
-        let controller = LedgerMapViewController(ledgerId: ledger.id)
+        let controller = LedgerMapViewController(ledgerId: ledger.id, initialPlaceId: initialPlaceId)
         controller.onPreviewVisibilityChanged = { [weak self] visible in
             self?.askButton.isHidden = visible
         }

@@ -7,6 +7,7 @@ import UIKit
 struct ExpenseDetailView: View {
     var detail: ExpenseDetail?
     var myParticipantId: UUID?
+    var onOpenMap: (UUID) -> Void = { _ in }
 
     var body: some View {
         if let detail {
@@ -23,6 +24,14 @@ struct ExpenseDetailView: View {
                     .listRowBackground(Color.clear)
                     .listRowInsets(EdgeInsets(top: 8, leading: 4, bottom: 8, trailing: 4))
             }
+            ExpensePlaceSection(
+                expenseId: detail.expense.id,
+                ledgerId: detail.expense.ledgerId,
+                occurredAt: detail.expense.occurredAt,
+                place: detail.place,
+                placeQuery: detail.placeQuery,
+                onOpenMap: onOpenMap
+            )
             Section("付款") {
                 ForEach(detail.payments, id: \.self) { payment in
                     AmountRow(title: payment.participantName, subtitle: payment.method.map(Self.methodName), amount: detail.money(payment.amountMinor), settled: nil)
@@ -141,6 +150,7 @@ final class ExpenseDetailViewController: UIHostingController<ExpenseDetailView> 
     init(expenseId: UUID, myParticipantId: UUID?) {
         super.init(rootView: ExpenseDetailView(detail: nil, myParticipantId: myParticipantId))
         navigationItem.largeTitleDisplayMode = .never
+        rootView.onOpenMap = { [weak self] placeId in self?.openMap(placeId: placeId) }
         let store = AppServices.store
         observation = store.observeExpenseDetail(expenseId: expenseId).start(in: store.writer, scheduling: .immediate, onError: { _ in }) { [weak self] detail in
             self?.rootView.detail = detail
@@ -149,4 +159,11 @@ final class ExpenseDetailViewController: UIHostingController<ExpenseDetailView> 
 
     @available(*, unavailable)
     required init?(coder: NSCoder) { nil }
+
+    private func openMap(placeId: UUID) {
+        guard let ledgerId = rootView.detail?.expense.ledgerId else { return }
+        let store = AppServices.store
+        guard let ledger = try? store.writer.read({ db in try Ledger.fetchOne(db, key: ledgerId.uuidString) }) else { return }
+        navigationController?.pushViewController(ActivityViewController(ledger: ledger, initialPlaceId: placeId), animated: true)
+    }
 }

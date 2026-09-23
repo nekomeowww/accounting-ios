@@ -35,6 +35,8 @@ final class LedgerMapViewController: UIViewController {
     private(set) var isPreviewVisible = false
 
     private let ledgerId: UUID
+    private let initialPlaceId: UUID?
+    private var didSelectInitialPlace = false
     private let mapView = MKMapView()
     private let emptyLabel = UILabel()
     private var previewHost: UIHostingController<MapPreviewCard>?
@@ -47,8 +49,9 @@ final class LedgerMapViewController: UIViewController {
     private var latestPins: [LedgerPersistence.MapPin] = []
     private var isApplyingDiff = false
 
-    init(ledgerId: UUID) {
+    init(ledgerId: UUID, initialPlaceId: UUID? = nil) {
         self.ledgerId = ledgerId
+        self.initialPlaceId = initialPlaceId
         super.init(nibName: nil, bundle: nil)
     }
 
@@ -139,6 +142,19 @@ final class LedgerMapViewController: UIViewController {
         pinsById = newById
         latestPins = pins
         emptyLabel.isHidden = !pins.isEmpty
+
+        if !didSelectInitialPlace, let initialPlaceId, let initialPin = pinsById[initialPlaceId] {
+            didSelectInitialPlace = true
+            didFitInitialPins = true
+            selectedPinId = initialPlaceId
+            mapView.setRegion(
+                MKCoordinateRegion(
+                    center: CLLocationCoordinate2D(latitude: initialPin.place.latitude, longitude: initialPin.place.longitude),
+                    latitudinalMeters: 500, longitudinalMeters: 500
+                ),
+                animated: false
+            )
+        }
         attemptInitialFit()
 
         if let selectedPinId {
