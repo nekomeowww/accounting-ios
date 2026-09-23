@@ -14,18 +14,6 @@ enum PlaceSearch {
 
         let region = biasRegion(ledgerId: ledgerId, occurredAt: occurredAt)
 
-        if let mapItems = await run(query: query, region: region) {
-            return rank(mapItems, hint: hint, region: region)
-        }
-        guard region != nil else { return [] }
-        // Region-biased request failed (e.g. MKErrorGEOError for an overly wide bounding box); retry unbiased.
-        if let mapItems = await run(query: query, region: nil) {
-            return rank(mapItems, hint: hint, region: nil)
-        }
-        return []
-    }
-
-    private static func run(query: String, region: MKCoordinateRegion?) async -> [MKMapItem]? {
         let request = MKLocalSearch.Request()
         request.naturalLanguageQuery = query
         request.resultTypes = [.pointOfInterest, .address]
@@ -34,20 +22,21 @@ enum PlaceSearch {
             request.regionPriority = .default
         }
         logger.debug("search query=\(query, privacy: .public) region=\(region.map { "\($0.center.latitude),\($0.center.longitude) span=\($0.span.latitudeDelta)x\($0.span.longitudeDelta)" } ?? "none", privacy: .public)")
+
         do {
             let response = try await MKLocalSearch(request: request).start()
-            logger.debug("search query=\(query, privacy: .public) mapItems=\(response.mapItems.count)")
-            return response.mapItems
+            let candidates = response.mapItems.compactMap(makeCandidate)
+            let center = region.map { (latitude: $0.center.latitude, longitude: $0.center.longitude) }
+            let ranked = PlaceMatching.rank(candidates: candidates, hint: hint, center: center)
+            logger.debug("search query=\(query, privacy: .public) mapItems=\(response.mapItems.count) ranked=\(ranked.count)")
+            return ranked
+        } catch let error as MKError where error.code == .placemarkNotFound {
+            logger.info("search no results query=\(query, privacy: .public) error=\(error as NSError, privacy: .public)")
+            return []
         } catch {
-            logger.error("search failed query=\(query, privacy: .public) region=\(region != nil, privacy: .public) error=\(error as NSError, privacy: .public)")
-            return nil
+            logger.error("search failed query=\(query, privacy: .public) error=\(error as NSError, privacy: .public)")
+            return []
         }
-    }
-
-    private static func rank(_ mapItems: [MKMapItem], hint: PlaceHint, region: MKCoordinateRegion?) -> [Candidate] {
-        let candidates = mapItems.compactMap(makeCandidate)
-        let center = region.map { (latitude: $0.center.latitude, longitude: $0.center.longitude) }
-        return PlaceMatching.rank(candidates: candidates, hint: hint, center: center)
     }
 
     private static func biasRegion(ledgerId: UUID, occurredAt: Date) -> MKCoordinateRegion? {
