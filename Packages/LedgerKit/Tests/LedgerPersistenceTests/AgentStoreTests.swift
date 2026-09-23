@@ -145,6 +145,8 @@ private func tool(_ store: LedgerStore, _ prepared: PreparedAgentRun, index: Int
     }
     let reopened = try LedgerStore.onDisk(at: path, actorId: actor)
     #expect(try reopened.writer.read { try AgentRunRecord.fetchOne($0, key: saved.1.uuidString)?.status } == .interrupted)
+    let retryable = { try reopened.writer.read { try Message.filter(Column("agentRunId") == saved.1.uuidString && Column("status") == "failed").fetchCount($0) } }
+    #expect(try retryable() == 1)
     let recovered = try #require(try reopened.resumeAgentRun(runId: saved.1))
     #expect(recovered.inputJSON == nil)
     let history = try JSONSerialization.jsonObject(with: Data(recovered.historyJSON.utf8)) as! [[String: Any]]
@@ -153,6 +155,7 @@ private func tool(_ store: LedgerStore, _ prepared: PreparedAgentRun, index: Int
     #expect(cards.count == 2)
     #expect(cards.contains { $0.id == saved.2 })
     #expect(try reopened.writer.read { try Message.filter(Column("role") == "user").fetchCount($0) } == 1)
+    #expect(try retryable() == 0)
     #expect(throws: AgentStoreError.busy) { try reopened.resumeAgentRun(runId: saved.1) }
 }
 

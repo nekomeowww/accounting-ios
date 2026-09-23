@@ -55,7 +55,12 @@ struct AgentSettings: Equatable {
     }
 
     var isConfigured: Bool {
-        !apiKey.isEmpty && !model.isEmpty && (provider == .anthropic || URL(string: baseURL)?.host != nil)
+        !apiKey.isEmpty && !model.isEmpty && (provider == .anthropic || Self.isAllowedBaseURL(baseURL))
+    }
+
+    static func isAllowedBaseURL(_ string: String) -> Bool {
+        guard let url = URL(string: string), let host = url.host?.lowercased() else { return false }
+        return url.scheme == "https" || (url.scheme == "http" && ["127.0.0.1", "localhost", "::1"].contains(host))
     }
 
     func configurationJSON(conversationId: UUID, systemPrompt: String, historyJSON: String) throws -> String {
@@ -65,8 +70,9 @@ struct AgentSettings: Equatable {
         let url = provider == .anthropic ? "https://api.anthropic.com" : baseURL
         let config: [String: Any] = [
             "conversationId": conversationId.uuidString, "systemPrompt": systemPrompt, "apiKey": apiKey,
+            // pi-ai omits the output cap when maxTokens is 0; OpenAI-compatible hosts have differing limits.
             "model": ["id": model, "name": model, "provider": provider.rawValue, "api": api, "baseUrl": url,
-                      "reasoning": false, "input": ["text"], "contextWindow": 200_000, "maxTokens": 16_000,
+                      "reasoning": false, "input": ["text"], "contextWindow": 200_000, "maxTokens": provider == .anthropic ? 16_000 : 0,
                       "cost": ["input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0]],
             "history": history,
             "tools": [["name": "propose_expense", "label": "记账卡片",

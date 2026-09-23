@@ -23,6 +23,11 @@ struct AgentSettingsView: View {
                         .keyboardType(.URL)
                         .autocorrectionDisabled()
                         .textInputAutocapitalization(.never)
+                    if !settings.baseURL.isEmpty, !AgentSettings.isAllowedBaseURL(settings.baseURL) {
+                        Text("需要 HTTPS 地址；HTTP 仅允许 localhost。")
+                            .font(.footnote)
+                            .foregroundStyle(.red)
+                    }
                 }
             }
             Section("API Key") {

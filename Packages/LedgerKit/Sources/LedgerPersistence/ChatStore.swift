@@ -147,6 +147,6 @@ extension LedgerStore {
 
     static func failInterruptedStreams(_ db: Database) throws {
         try db.execute(sql: "UPDATE message SET status = 'failed', error = 'interrupted', updatedAt = ? WHERE status = 'streaming'", arguments: [Date()])
-        try db.execute(sql: "UPDATE agentRun SET status = 'interrupted', error = 'interrupted', updatedAt = ? WHERE status = 'running'", arguments: [Date()])
+        try interruptRunningAgents(db)
     }
 }

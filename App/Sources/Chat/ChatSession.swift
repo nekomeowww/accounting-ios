@@ -45,6 +45,7 @@ final class ChatSession {
             }
             guard let user else { throw AgentStoreError.cannotResume }
             try send(user.text)
+            _ = try? store.writer.write { try assistant.delete($0) }
             return
         }
         if let prepared = try store.resumeAgentRun(runId: runId) { run(prepared) }
@@ -102,6 +103,8 @@ final class ChatSession {
             do {
                 try store.finishAgentRun(conversationId: conversation.id, runId: runId, status: status, error: errorText)
             } catch {
+                try? store.finishAgentRun(conversationId: conversation.id, runId: runId, status: .failed,
+                                          error: error.localizedDescription)
                 onRunError?("无法保存 Agent 运行结果：" + error.localizedDescription)
             }
             currentRunId = nil

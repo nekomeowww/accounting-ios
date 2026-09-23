@@ -173,12 +173,21 @@ extension LedgerStore {
                            arguments: [status.rawValue, error, Date(), runId.uuidString])
             try db.execute(sql: "UPDATE message SET status = 'failed', error = ?, updatedAt = ? WHERE agentRunId = ? AND status = 'streaming'",
                            arguments: [error ?? (status == .aborted ? "已停止" : "interrupted"), Date(), runId.uuidString])
-            if status != .complete,
-               try Message.filter(Column("agentRunId") == runId.uuidString && Column("status") == "failed").fetchCount(db) == 0 {
-                try Self.projectText(db, run, id: runId.uuidString + ":failure", text: "", status: .failed,
-                                     error: error ?? (status == .aborted ? "已停止" : "运行失败"))
+            if status != .complete {
+                try Self.ensureFailureMessage(db, run, error: error ?? (status == .aborted ? "已停止" : "运行失败"))
             }
         }
+    }
+
+    static func interruptRunningAgents(_ db: Database) throws {
+        let runs = try AgentRunRecord.filter(Column("status") == "running").fetchAll(db)
+        try db.execute(sql: "UPDATE agentRun SET status = 'interrupted', error = 'interrupted', updatedAt = ? WHERE status = 'running'", arguments: [Date()])
+        for run in runs { try ensureFailureMessage(db, run, error: "interrupted") }
+    }
+
+    private static func ensureFailureMessage(_ db: Database, _ run: AgentRunRecord, error: String) throws {
+        guard try Message.filter(Column("agentRunId") == run.id.uuidString && Column("status") == "failed").fetchCount(db) == 0 else { return }
+        try projectText(db, run, id: run.id.uuidString + ":failure", text: "", status: .failed, error: error)
     }
 
     /// Explicit retry only. Repair committed results first; never discard or repeat an already committed tool effect.
@@ -192,10 +201,10 @@ extension LedgerStore {
             guard latest?.id == previous.id else { throw AgentStoreError.cannotResume }
             let history = try Self.contextEntries(Self.transcript(db, previous.conversationId))
             let pending = try Self.pendingCalls(history)
+            try db.execute(sql: "DELETE FROM message WHERE agentRunId = ? AND agentMessageId = ?",
+                           arguments: [previous.id.uuidString, previous.id.uuidString + ":failure"])
             if let last = history.last, pending.isEmpty, (try AgentJSON.object(last.payload))["role"] as? String == "assistant" {
                 try db.execute(sql: "UPDATE agentRun SET status = 'complete', error = NULL, updatedAt = ? WHERE id = ?", arguments: [Date(), previous.id.uuidString])
-                try db.execute(sql: "DELETE FROM message WHERE agentRunId = ? AND agentMessageId = ?",
-                               arguments: [previous.id.uuidString, previous.id.uuidString + ":failure"])
                 return nil
             }
             let now = Date()
