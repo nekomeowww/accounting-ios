@@ -24,6 +24,9 @@ public struct ExpenseProposal: Hashable, Sendable, Codable {
     public var consumers: [String]?
     public var items: [ExpenseProposalItem]?
     public var occurredAt: String?
+    public var endsAt: String?
+    public var originalAmount: String?
+    public var originalCurrency: String?
     public var category: String?
     public var note: String?
     public var place: PlaceHint?
@@ -31,6 +34,9 @@ public struct ExpenseProposal: Hashable, Sendable, Codable {
     enum CodingKeys: String, CodingKey {
         case merchant, amount, currency, payer, consumers, items, category, note, place
         case occurredAt = "occurred_at"
+        case endsAt = "ends_at"
+        case originalAmount = "original_amount"
+        case originalCurrency = "original_currency"
     }
 
     public static let inputSchema = """
@@ -42,6 +48,9 @@ public struct ExpenseProposal: Hashable, Sendable, Codable {
         "consumers":{"type":"array","items":{"type":"string"},"description":"整笔或未单独指定分摊人的项目由这些成员平摊；省略表示全员"},
         "items":{"type":"array","minItems":1,"description":"同一张账单的项目明细；逐项目分摊时填写，所有项目金额之和必须等于 amount。省略时按单项目记账","items":{"type":"object","additionalProperties":false,"required":["name","amount"],"properties":{"name":{"type":"string","description":"项目名称"},"amount":{"type":"string","description":"该项目金额，原币主单位的十进制字符串"},"consumers":{"type":"array","items":{"type":"string"},"description":"承担该项目的成员；省略时沿用顶层 consumers，再省略表示全员"}}}},
         "occurred_at":{"type":"string","description":"消费时间 yyyy-MM-ddTHH:mm（本地时间），省略表示现在"},
+        "ends_at":{"type":"string","description":"跨天消费（住宿、租车）的结束时间 yyyy-MM-ddTHH:mm，如入住 9/15 退房 9/18；普通消费省略"},
+        "original_amount":{"type":"string","description":"实际支付币种与标价币种不同时（如支付宝按人民币扣款、标价日元），填标价金额；amount/currency 填实际支付"},
+        "original_currency":{"type":"string","description":"标价币种 ISO 代码，与 original_amount 同时填写"},
         "category":{"type":"string","description":"分类，如 餐饮、交通、住宿、门票、购物"},
         "note":{"type":"string","description":"备注"},
         "place":{"type":"object","additionalProperties":false,"required":["name"],"description":"消费地点线索","properties":{
@@ -70,7 +79,8 @@ public struct ExpenseProposal: Hashable, Sendable, Codable {
         }
         let code = currency.trimmingCharacters(in: .whitespaces).uppercased()
         guard code.count == 3 else { throw ProposalError.invalidCurrency(currency) }
-        func minorUnits(_ text: String) throws -> Int64 {
+        func minorUnits(_ text: String, in currencyCode: String? = nil) throws -> Int64 {
+            let code = currencyCode ?? code
             let trimmed = text.trimmingCharacters(in: .whitespaces)
             guard trimmed.range(of: #"^[0-9]+(?:\.[0-9]+)?$"#, options: .regularExpression) != nil,
                   let major = Decimal(string: trimmed, locale: Locale(identifier: "en_US_POSIX")) else {
@@ -112,18 +122,27 @@ public struct ExpenseProposal: Hashable, Sendable, Codable {
             lines = [try LineDraft(name: merchant, amountMinor: minor,
                                    consumers: consumerIds(consumers).map { ConsumerDraft($0) })]
         }
-        let occurred = try occurredAt.map { raw -> Date in
+        func parseDate(_ raw: String) throws -> Date {
             let formatter = DateFormatter()
             formatter.locale = Locale(identifier: "en_US_POSIX")
             formatter.timeZone = timeZone
-            formatter.dateFormat = raw.count > 16 ? "yyyy-MM-dd'T'HH:mm:ss" : "yyyy-MM-dd'T'HH:mm"
+            formatter.dateFormat = raw.count > 16 ? "yyyy-MM-dd'T'HH:mm:ss" : raw.count > 10 ? "yyyy-MM-dd'T'HH:mm" : "yyyy-MM-dd"
             guard let date = formatter.date(from: raw) else { throw ProposalError.invalidDate(raw) }
             return date
-        } ?? now
+        }
+        let occurred = try occurredAt.map(parseDate) ?? now
+        let ends = try endsAt.map(parseDate)
+        if let ends, ends < occurred { throw ProposalError.invalidDate(endsAt!) }
+        var original: Money?
+        if let originalAmount {
+            let originalCode = (originalCurrency ?? "").trimmingCharacters(in: .whitespaces).uppercased()
+            guard originalCode.count == 3, originalCode != code else { throw ProposalError.invalidCurrency(originalCurrency ?? "") }
+            original = Money(minor: try minorUnits(originalAmount, in: originalCode), currency: originalCode)
+        }
 
         return ExpenseDraft(
             ledgerId: ledgerId, merchant: merchant, note: note, category: category,
-            occurredAt: occurred, timeZone: timeZone.identifier, currency: code, source: .agent,
+            occurredAt: occurred, endsAt: ends, timeZone: timeZone.identifier, currency: code, original: original, source: .agent,
             lines: lines,
             payments: [PaymentDraft(payerId, amountMinor: minor)]
         )

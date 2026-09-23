@@ -16,14 +16,16 @@ struct ProposalPreview {
     var payer: String
     var lines: [Line]
     var occurredAt: Date
+    var endsAt: Date?
+    var original: Money?
     var category: String?
     var note: String?
 
-    static func make(payload: String?, ledger: Ledger, store: LedgerStore) -> Result<ProposalPreview, Error> {
+    static func make(payload: String?, createdAt: Date, ledger: Ledger, store: LedgerStore) -> Result<ProposalPreview, Error> {
         Result {
             let participants = try store.participants(ledgerId: ledger.id)
             let names = Dictionary(uniqueKeysWithValues: participants.map { ($0.id, $0.name) })
-            let draft = try ExpenseProposal.decode(payload ?? "").draft(ledgerId: ledger.id, participants: participants.map { (id: $0.id, name: $0.name) })
+            let draft = try ExpenseProposal.decode(payload ?? "").draft(ledgerId: ledger.id, participants: participants.map { (id: $0.id, name: $0.name) }, now: createdAt)
             let total = Money(minor: draft.totalMinor, currency: draft.currency)
             let lines = draft.lines.map { line in
                 Line(name: line.name, amount: Money(minor: line.amountMinor, currency: draft.currency),
@@ -41,6 +43,8 @@ struct ProposalPreview {
                 payer: draft.payments.compactMap { names[$0.participantId] }.joined(separator: "、"),
                 lines: lines,
                 occurredAt: draft.occurredAt,
+                endsAt: draft.endsAt,
+                original: draft.original,
                 category: draft.category,
                 note: draft.note
             )
@@ -107,7 +111,8 @@ struct ProposalCardView: View {
                 if preview.lines.count == 1, let line = preview.lines.first {
                     row("分摊", splitLabel(line.consumers))
                 }
-                row("时间", preview.occurredAt.formatted(date: .abbreviated, time: .shortened))
+                row("时间", ExpenseDates.label(preview.occurredAt, preview.endsAt))
+                if let original = preview.original { row("标价", original.formatted) }
                 if let category = preview.category { row("分类", category) }
                 if let note = preview.note, !note.isEmpty { row("备注", note) }
             }

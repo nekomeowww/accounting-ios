@@ -10,9 +10,10 @@ final class ActivityViewController: UIViewController {
         case day(DateComponents)
     }
 
-    private enum Item: Hashable {
+    fileprivate enum Item: Hashable {
         case balance
         case expense(UUID)
+        case transfer(UUID)
     }
 
     private let ledger: Ledger
@@ -35,11 +36,14 @@ final class ActivityViewController: UIViewController {
         super.init(nibName: nil, bundle: nil)
         navigationItem.largeTitleDisplayMode = .never
         navigationItem.subtitle = ledger.name
-        navigationItem.backButtonTitle = ledger.name
-        navigationItem.rightBarButtonItem = UIBarButtonItem(image: UIImage(systemName: "ellipsis"), primaryAction: UIAction { [weak self] _ in
-            guard let self else { return }
-            navigationController?.pushViewController(LedgerSettingsViewController(ledgerId: ledger.id), animated: true)
-        })
+        navigationItem.rightBarButtonItem = UIBarButtonItem(image: UIImage(systemName: "ellipsis"), menu: UIMenu(children: [
+            UIAction(title: "统计", image: UIImage(systemName: "chart.pie")) { [weak self] _ in
+                self?.navigationController?.pushViewController(LedgerStatsViewController(ledgerId: ledger.id), animated: true)
+            },
+            UIAction(title: "账本设置", image: UIImage(systemName: "gearshape")) { [weak self] _ in
+                self?.navigationController?.pushViewController(LedgerSettingsViewController(ledgerId: ledger.id), animated: true)
+            },
+        ]))
     }
 
     @available(*, unavailable)
@@ -69,6 +73,12 @@ final class ActivityViewController: UIViewController {
     private func configureCollectionView() {
         var config = UICollectionLayoutListConfiguration(appearance: .insetGrouped)
         config.headerMode = .supplementary
+        config.trailingSwipeActionsConfigurationProvider = { [weak self] indexPath in
+            guard let self, case .transfer(let id) = dataSource.itemIdentifier(for: indexPath) else { return nil }
+            return UISwipeActionsConfiguration(actions: [UIContextualAction(style: .destructive, title: "删除") { _, _, done in
+                do { try AppServices.store.deleteTransfer(id: id); done(true) } catch { done(false) }
+            }])
+        }
         let layout = UICollectionViewCompositionalLayout.list(using: config)
         collectionView = UICollectionView(frame: view.bounds, collectionViewLayout: layout)
         collectionView.autoresizingMask = [.flexibleWidth, .flexibleHeight]
@@ -139,12 +149,18 @@ final class ActivityViewController: UIViewController {
             switch item {
             case .balance:
                 cell.contentConfiguration = UIHostingConfiguration {
-                    BalanceCardView(settlement: settlement, myParticipantId: myParticipantId)
+                    BalanceCardView(settlement: settlement, myParticipantId: myParticipantId) { [weak self] transfer in
+                        self?.confirmSettle(transfer)
+                    }
                 }
             case .expense(let id):
                 guard let row = rows[id] else { return }
                 cell.contentConfiguration = UIHostingConfiguration { ExpenseRowView(row: row) }
                 cell.accessories = [.disclosureIndicator()]
+            case .transfer(let id):
+                guard let row = rows[id] else { return }
+                cell.contentConfiguration = UIHostingConfiguration { ExpenseRowView(row: row) }
+                cell.accessories = []
             }
         }
         let header = UICollectionView.SupplementaryRegistration<UICollectionViewListCell>(elementKind: UICollectionView.elementKindSectionHeader) { [unowned self] view, _, indexPath in
@@ -189,10 +205,31 @@ final class ActivityViewController: UIViewController {
         let grouped = Dictionary(grouping: rows) { $0.day }
         for day in grouped.keys.sorted(by: { ($0.year!, $0.month!, $0.day!) > ($1.year!, $1.month!, $1.day!) }) {
             snapshot.appendSections([.day(day)])
-            snapshot.appendItems(grouped[day]!.map { .expense($0.id) }, toSection: .day(day))
+            snapshot.appendItems(grouped[day]!.map(\.item), toSection: .day(day))
         }
-        snapshot.reconfigureItems(rows.map { .expense($0.id) }.filter { snapshot.indexOfItem($0) != nil })
+        snapshot.reconfigureItems(rows.map(\.item).filter { snapshot.indexOfItem($0) != nil })
         dataSource.apply(snapshot, animatingDifferences: view.window != nil)
+    }
+
+    private func confirmSettle(_ transfer: PlannedTransfer) {
+        let amount = Money(minor: transfer.minor, currency: settlement.currency)
+        let alert = UIAlertController(
+            title: "记录还款",
+            message: "\(settlement.name(transfer.from)) 已转给 \(settlement.name(transfer.to)) \(amount.formatted)？",
+            preferredStyle: .alert
+        )
+        alert.addAction(UIAlertAction(title: "取消", style: .cancel))
+        alert.addAction(UIAlertAction(title: "记录", style: .default) { [weak self] _ in
+            guard let self else { return }
+            do {
+                try AppServices.store.recordTransfer(ledgerId: ledger.id, from: transfer.from, to: transfer.to, amount: amount)
+            } catch {
+                let failure = UIAlertController(title: "记录失败", message: error.localizedDescription, preferredStyle: .alert)
+                failure.addAction(UIAlertAction(title: "好", style: .default))
+                present(failure, animated: true)
+            }
+        })
+        present(alert, animated: true)
     }
 
     private func reloadBalance() {
@@ -216,6 +253,8 @@ extension ActivityViewController: UICollectionViewDelegate {
 }
 
 private extension ActivityRow {
+    var item: ActivityViewController.Item { kind == .transfer ? .transfer(id) : .expense(id) }
+
     var day: DateComponents {
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = TimeZone(identifier: timeZone) ?? .current

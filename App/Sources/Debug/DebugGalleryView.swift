@@ -75,7 +75,7 @@ struct DebugGalleryView: View {
                 Section(sample.title) {
                     ProposalCardView(
                         state: sample.state,
-                        preview: ProposalPreview.make(payload: sample.payload(f), ledger: f.ledger, store: AppServices.store),
+                        preview: ProposalPreview.make(payload: sample.payload(f), createdAt: .now, ledger: f.ledger, store: AppServices.store),
                         onAccept: {}, onDismiss: {}, onOpen: {}
                     )
                     .listRowInsets(EdgeInsets(top: 0, leading: 16, bottom: 0, trailing: 16))

@@ -10,3 +10,4 @@ Secrets.xcconfig
 
 *.xcodeproj
 .superpowers/
+Packages/LedgerKit/Package.resolved

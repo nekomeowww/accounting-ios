@@ -6,7 +6,7 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
     func scene(_ scene: UIScene, willConnectTo session: UISceneSession, options connectionOptions: UIScene.ConnectionOptions) {
         guard let windowScene = scene as? UIWindowScene else { return }
         let window = UIWindow(windowScene: windowScene)
-        let navigation = UINavigationController(rootViewController: LedgerListViewController())
+        let navigation = NavigationController(rootViewController: LedgerListViewController())
         window.rootViewController = navigation
         window.makeKeyAndVisible()
         self.window = window
@@ -20,5 +20,12 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
             }
         }
         #endif
+    }
+}
+
+final class NavigationController: UINavigationController {
+    override func pushViewController(_ viewController: UIViewController, animated: Bool) {
+        topViewController?.navigationItem.backButtonDisplayMode = .minimal
+        super.pushViewController(viewController, animated: animated)
     }
 }

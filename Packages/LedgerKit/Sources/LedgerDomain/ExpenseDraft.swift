@@ -50,21 +50,25 @@ public struct ExpenseDraft: Hashable, Sendable {
     public var note: String?
     public var category: String?
     public var occurredAt: Date
+    public var endsAt: Date?
     public var timeZone: String
     public var currency: String
+    public var original: Money?
     public var location: Location?
     public var source: ExpenseSource
     public var lines: [LineDraft]
     public var payments: [PaymentDraft]
 
-    public init(ledgerId: UUID, merchant: String, note: String? = nil, category: String? = nil, occurredAt: Date, timeZone: String = TimeZone.current.identifier, currency: String, location: Location? = nil, source: ExpenseSource = .manual, lines: [LineDraft], payments: [PaymentDraft]) {
+    public init(ledgerId: UUID, merchant: String, note: String? = nil, category: String? = nil, occurredAt: Date, endsAt: Date? = nil, timeZone: String = TimeZone.current.identifier, currency: String, original: Money? = nil, location: Location? = nil, source: ExpenseSource = .manual, lines: [LineDraft], payments: [PaymentDraft]) {
         self.ledgerId = ledgerId
         self.merchant = merchant
         self.note = note
         self.category = category
         self.occurredAt = occurredAt
+        self.endsAt = endsAt
         self.timeZone = timeZone
         self.currency = currency
+        self.original = original
         self.location = location
         self.source = source
         self.lines = lines
@@ -89,12 +93,14 @@ public enum ExpenseBuilder {
         let paid = draft.payments.reduce(0) { $0 + $1.amountMinor }
         guard paid == draft.totalMinor else { throw DomainError.paymentsMismatch(expected: draft.totalMinor, actual: paid) }
         guard draft.payments.allSatisfy({ $0.amountMinor > 0 }) else { throw DomainError.invalidAmount }
+        if let endsAt = draft.endsAt, endsAt < draft.occurredAt { throw DomainError.invalidDateRange }
+        if let original = draft.original, original.minor <= 0 || original.currency == draft.currency { throw DomainError.invalidAmount }
         let referenced = Set(draft.payments.map(\.participantId) + draft.lines.flatMap { $0.consumers.map(\.participantId) })
         if let outsider = referenced.first(where: { !ledgerParticipantIds.contains($0) }) {
             throw DomainError.participantNotInLedger(outsider)
         }
 
-        let expense = Expense(id: expenseId, ledgerId: draft.ledgerId, merchant: draft.merchant, note: draft.note, category: draft.category, occurredAt: draft.occurredAt, timeZone: draft.timeZone, currency: draft.currency, location: draft.location, source: draft.source, createdAt: now, updatedAt: now, version: 1, createdBy: actorId, updatedBy: actorId)
+        let expense = Expense(id: expenseId, ledgerId: draft.ledgerId, merchant: draft.merchant, note: draft.note, category: draft.category, occurredAt: draft.occurredAt, endsAt: draft.endsAt, timeZone: draft.timeZone, currency: draft.currency, original: draft.original, location: draft.location, source: draft.source, createdAt: now, updatedAt: now, version: 1, createdBy: actorId, updatedBy: actorId)
 
         var lines: [ExpenseLine] = []
         var consumers: [LineConsumer] = []

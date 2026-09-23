@@ -3,9 +3,13 @@ import GRDB
 import LedgerDomain
 
 public struct ActivityRow: Hashable, Sendable, Decodable, FetchableRecord, Identifiable {
+    public enum Kind: String, Hashable, Sendable, Decodable { case expense, transfer }
+
     public var id: UUID
+    public var kind: Kind
     public var merchant: String
     public var occurredAt: Date
+    public var endsAt: Date?
     public var timeZone: String
     public var currency: String
     public var totalMinor: Int64
@@ -50,15 +54,22 @@ extension LedgerStore {
 
     public static func fetchActivity(_ db: Database, ledgerId: UUID) throws -> [ActivityRow] {
         try ActivityRow.fetchAll(db, sql: """
-                SELECT e.id, e.merchant, e.occurredAt, e.timeZone, e.currency,
+                SELECT e.id, 'expense' AS kind, e.merchant, e.occurredAt, e.endsAt, e.timeZone, e.currency,
                   (SELECT COALESCE(SUM(amountMinor), 0) FROM expenseLine WHERE expenseId = e.id) AS totalMinor,
                   \(payerAndConsumerColumnsSQL),
                   p.name AS placeName, p.branch AS placeBranch, p.address AS placeAddress
                 FROM expense e
                 LEFT JOIN place p ON p.id = e.placeId
                 WHERE e.ledgerId = ? AND e.deletedAt IS NULL
-                ORDER BY e.occurredAt DESC
-                """, arguments: [ledgerId.uuidString])
+                UNION ALL
+                SELECT tr.id, 'transfer', pf.name || ' → ' || pt.name, tr.occurredAt, NULL, ?, tr.currency, tr.amountMinor,
+                  pf.name, tr.fromParticipantId, 0, NULL, NULL, NULL
+                FROM transfer tr
+                JOIN participant pf ON pf.id = tr.fromParticipantId
+                JOIN participant pt ON pt.id = tr.toParticipantId
+                WHERE tr.ledgerId = ? AND tr.deletedAt IS NULL
+                ORDER BY occurredAt DESC
+                """, arguments: [ledgerId.uuidString, TimeZone.current.identifier, ledgerId.uuidString])
     }
 
     public func observeBalances(ledgerId: UUID) -> ValueObservation<ValueReducers.Fetch<[BalanceRow]>> {

@@ -207,6 +207,13 @@ enum Migrations {
                 t.add(column: "placeQuery", .text)
             }
         }
+        migrator.registerMigration("v7") { db in
+            try db.alter(table: "expense") { t in
+                t.add(column: "endsAt", .datetime)
+                t.add(column: "originalCurrency", .text)
+                t.add(column: "originalMinor", .integer)
+            }
+        }
         return migrator
     }
 

@@ -22,17 +22,21 @@ struct ExpenseRowView: View {
     }
 
     private var subtitle: String {
-        switch row.consumerCount {
-        case 0: row.payerNames
-        case 1: "\(row.payerNames) 支付 · 个人消费"
+        let base = switch (row.kind, row.consumerCount) {
+        case (.transfer, _): "还款"
+        case (_, 0): row.payerNames
+        case (_, 1): "\(row.payerNames) 支付 · 个人消费"
         default: "\(row.payerNames) 支付 · \(row.consumerCount) 人分摊"
         }
+        guard let endsAt = row.endsAt else { return base }
+        return "\(base) · \(ExpenseDates.label(row.occurredAt, endsAt, timeZone: TimeZone(identifier: row.timeZone) ?? .current))"
     }
 }
 
 struct BalanceCardView: View {
     var settlement: Settlement
     var myParticipantId: UUID?
+    var onSettle: (PlannedTransfer) -> Void = { _ in }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -61,12 +65,16 @@ struct BalanceCardView: View {
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(.secondary)
                 ForEach(settlement.transfers, id: \.self) { transfer in
-                    TransferRow(
-                        from: settlement.name(transfer.from),
-                        to: settlement.name(transfer.to),
-                        amount: Money(minor: transfer.minor, currency: settlement.currency),
-                        involvesMe: transfer.from == myParticipantId || transfer.to == myParticipantId
-                    )
+                    Button { onSettle(transfer) } label: {
+                        TransferRow(
+                            from: settlement.name(transfer.from),
+                            to: settlement.name(transfer.to),
+                            amount: Money(minor: transfer.minor, currency: settlement.currency),
+                            involvesMe: transfer.from == myParticipantId || transfer.to == myParticipantId
+                        )
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityHint("记录这笔还款")
                 }
             }
         }
@@ -99,6 +107,17 @@ private struct TransferRow: View {
         .foregroundStyle(involvesMe ? .primary : .secondary)
         .accessibilityElement(children: .combine)
         .accessibilityLabel("\(from) 转给 \(to) \(amount.formatted)")
+    }
+}
+
+enum ExpenseDates {
+    static func label(_ start: Date, _ end: Date?, timeZone: TimeZone = .current) -> String {
+        var style = Date.FormatStyle(date: .abbreviated, time: end == nil ? .shortened : .omitted)
+        style.timeZone = timeZone
+        guard let end else { return start.formatted(style) }
+        var short = Date.FormatStyle().month(.abbreviated).day()
+        short.timeZone = timeZone
+        return "\(start.formatted(short)) – \(end.formatted(style))"
     }
 }
 

@@ -65,3 +65,23 @@ private let tokyo = TimeZone(identifier: "Asia/Tokyo")!
         try ExpenseProposal.decode(empty).draft(ledgerId: ledger, participants: members)
     }
 }
+
+@Test func proposalKeepsStayRangeAndOriginalPrice() throws {
+    let stay = try ExpenseProposal.decode(#"{"merchant":"Airbnb","amount":"346.97","currency":"USD","payer":"whitewater","occurred_at":"2026-09-15","ends_at":"2026-09-18"}"#)
+        .draft(ledgerId: ledger, participants: members, timeZone: tokyo)
+    let nights = Calendar(identifier: .gregorian).dateComponents([.day], from: stay.occurredAt, to: try #require(stay.endsAt)).day
+    #expect(nights == 3)
+
+    let onimaru = try ExpenseProposal.decode(#"{"merchant":"おにまる","amount":"17.03","currency":"CNY","payer":"innei","consumers":["innei"],"original_amount":"399","original_currency":"jpy"}"#)
+        .draft(ledgerId: ledger, participants: members)
+    #expect(onimaru.original == Money(minor: 399, currency: "JPY"))
+
+    #expect(throws: ProposalError.invalidDate("2026-09-14")) {
+        try ExpenseProposal.decode(#"{"merchant":"x","amount":"1","currency":"USD","payer":"innei","occurred_at":"2026-09-15","ends_at":"2026-09-14"}"#)
+            .draft(ledgerId: ledger, participants: members, timeZone: tokyo)
+    }
+    #expect(throws: ProposalError.invalidCurrency("CNY")) {
+        try ExpenseProposal.decode(#"{"merchant":"x","amount":"1","currency":"CNY","payer":"innei","original_amount":"1","original_currency":"CNY"}"#)
+            .draft(ledgerId: ledger, participants: members)
+    }
+}

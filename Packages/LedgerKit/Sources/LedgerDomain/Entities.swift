@@ -150,8 +150,11 @@ public struct Expense: Hashable, Sendable, Codable, Identifiable {
     public var updatedBy: UUID
     public var placeId: UUID?
     public var placeQuery: String?
+    public var endsAt: Date?
+    public var originalCurrency: String?
+    public var originalMinor: Int64?
 
-    public init(id: UUID, ledgerId: UUID, merchant: String, note: String? = nil, category: String? = nil, occurredAt: Date, timeZone: String, currency: String, location: Location? = nil, source: ExpenseSource, createdAt: Date, updatedAt: Date, deletedAt: Date? = nil, version: Int64, createdBy: UUID, updatedBy: UUID, placeId: UUID? = nil, placeQuery: String? = nil) {
+    public init(id: UUID, ledgerId: UUID, merchant: String, note: String? = nil, category: String? = nil, occurredAt: Date, endsAt: Date? = nil, timeZone: String, currency: String, original: Money? = nil, location: Location? = nil, source: ExpenseSource, createdAt: Date, updatedAt: Date, deletedAt: Date? = nil, version: Int64, createdBy: UUID, updatedBy: UUID, placeId: UUID? = nil, placeQuery: String? = nil) {
         self.id = id
         self.ledgerId = ledgerId
         self.merchant = merchant
@@ -173,6 +176,14 @@ public struct Expense: Hashable, Sendable, Codable, Identifiable {
         self.updatedBy = updatedBy
         self.placeId = placeId
         self.placeQuery = placeQuery
+        self.endsAt = endsAt
+        self.originalCurrency = original?.currency
+        self.originalMinor = original?.minor
+    }
+
+    public var original: Money? {
+        guard let originalCurrency, let originalMinor else { return nil }
+        return Money(minor: originalMinor, currency: originalCurrency)
     }
 }
 

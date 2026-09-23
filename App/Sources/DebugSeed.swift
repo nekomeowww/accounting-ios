@@ -46,25 +46,27 @@ enum DebugSeed {
 
         struct Row {
             var date: Date
+            var endsAt: Date? = nil
             var merchant: String
             var payer: Participant
             var amount: Int64
             var currency: String
             var consumers: [ConsumerDraft]
             var note: String? = nil
+            var original: Money? = nil
             var method: String? = nil
             var category: String? = nil
             var place: Candidate? = nil
         }
 
         let shared: [Row] = [
-            Row(date: date(9, 15), merchant: "Airbnb 东京·墨田区 3晚", payer: whitewater, amount: 34697, currency: "USD", consumers: four, note: "确认码 HMTDPDW5BA", category: "住宿", place: seedPlace("airbnb-tokyo", "Airbnb 东京·墨田区", 35.7101, 139.8107, category: "住宿")),
-            Row(date: date(9, 18), merchant: "TOYOTA 租车 热海站店 3天", payer: whitewater, amount: 37950, currency: "JPY", consumers: four, note: "予約番号 99922445400", category: "交通", place: seedPlace("toyota-atami", "TOYOTA レンタカー 熱海駅前店", 35.1036, 139.0775, category: "交通")),
-            Row(date: date(9, 21), merchant: "Airbnb 京都·下京区 3晚", payer: whitewater, amount: 71046, currency: "USD", consumers: four, note: "确认码 HMZRCTZBDT", category: "住宿", place: seedPlace("airbnb-kyoto", "Airbnb 京都·下京区", 34.9968, 135.7590, category: "住宿")),
+            Row(date: date(9, 15, 15), endsAt: date(9, 18, 10), merchant: "Airbnb 东京·墨田区 3晚", payer: whitewater, amount: 34697, currency: "USD", consumers: four, note: "确认码 HMTDPDW5BA", category: "住宿", place: seedPlace("airbnb-tokyo", "Airbnb 东京·墨田区", 35.7101, 139.8107, category: "住宿")),
+            Row(date: date(9, 18), endsAt: date(9, 21), merchant: "TOYOTA 租车 热海站店 3天", payer: whitewater, amount: 37950, currency: "JPY", consumers: four, note: "予約番号 99922445400", category: "交通", place: seedPlace("toyota-atami", "TOYOTA レンタカー 熱海駅前店", 35.1036, 139.0775, category: "交通")),
+            Row(date: date(9, 21, 15), endsAt: date(9, 24, 10), merchant: "Airbnb 京都·下京区 3晚", payer: whitewater, amount: 71046, currency: "USD", consumers: four, note: "确认码 HMZRCTZBDT", category: "住宿", place: seedPlace("airbnb-kyoto", "Airbnb 京都·下京区", 34.9968, 135.7590, category: "住宿")),
             Row(date: date(9, 15, 8), merchant: "机票 去程", payer: innei, amount: 269800, currency: "CNY", consumers: two, note: "仅 innei+白水 2 人分", category: "交通"),
             Row(date: date(9, 24, 18), merchant: "机票 回程", payer: innei, amount: 187600, currency: "CNY", consumers: two, note: "仅 innei+白水 2 人分", category: "交通"),
-            Row(date: date(9, 18), merchant: "Airbnb 伊东设计师公寓 301 2晚", payer: whitewater, amount: 52523, currency: "USD", consumers: four, note: "确认码 HMNETDRJZ8", category: "住宿", place: seedPlace("airbnb-ito", "Airbnb 伊东设计师公寓 301", 34.9659, 139.1019, category: "住宿")),
-            Row(date: date(9, 20), merchant: "石花海別邸 海うさぎ 1晚", payer: whitewater, amount: 86603, currency: "USD", consumers: four, note: "1 间双床房", category: "住宿", place: seedPlace("sekkaiso", "石花海別邸 海うさぎ", 34.9143, 139.1340, category: "住宿")),
+            Row(date: date(9, 18, 15), endsAt: date(9, 20, 10), merchant: "Airbnb 伊东设计师公寓 301 2晚", payer: whitewater, amount: 52523, currency: "USD", consumers: four, note: "确认码 HMNETDRJZ8", category: "住宿", place: seedPlace("airbnb-ito", "Airbnb 伊东设计师公寓 301", 34.9659, 139.1019, category: "住宿")),
+            Row(date: date(9, 20, 15), endsAt: date(9, 21, 10), merchant: "石花海別邸 海うさぎ 1晚", payer: whitewater, amount: 86603, currency: "USD", consumers: four, note: "1 间双床房", category: "住宿", place: seedPlace("sekkaiso", "石花海別邸 海うさぎ", 34.9143, 139.1340, category: "住宿")),
             Row(date: date(9, 19, 19), merchant: "晚餐 吃鱼", payer: innei, amount: 5460, currency: "JPY", consumers: two, note: "仅 innei+白水 2 人分", category: "餐饮"),
             Row(date: date(9, 20, 14), merchant: "伊豆高原 猫咪博物馆", payer: innei, amount: 5600, currency: "JPY", consumers: four, note: "4人门票", category: "门票", place: seedPlace("izu-cat-museum", "伊豆高原 猫の博物館", 34.8980, 139.1287, category: "门票")),
             Row(date: date(9, 20, 19), merchant: "晚餐 拉面居酒屋", payer: neko, amount: 5200, currency: "JPY", consumers: four, category: "餐饮"),
@@ -89,14 +91,14 @@ enum DebugSeed {
             Row(date: date(9, 22, 16), merchant: "マツモトキヨシ 京都四条河原町店", payer: innei, amount: 1389, currency: "JPY", consumers: mine, note: "オフテクス ティアージェW 657 + ソフトサンティア 627 + キレートレモン 105", category: "药妆", place: seedPlace("matsukiyo-kyoto", "マツモトキヨシ 京都四条河原町店", 35.0038, 135.7686, phone: "075-253-6160", category: "药妆")),
             Row(date: date(9, 22, 17), merchant: "京都まるん 祇園店", payer: innei, amount: 660, currency: "JPY", consumers: mine, note: "ピンズ 1点，含税10%", category: "购物", place: seedPlace("kyoto-marun", "京都まるん 祇園店", 35.0037, 135.7751, address: "〒605-0073 京都市東山区祇園町北側244", category: "购物")),
             Row(date: date(9, 22, 17, 30), merchant: "なわーど ラッシュ", payer: innei, amount: 540, currency: "JPY", consumers: mine, note: "レモン風味（果汁1%・ガラス瓶）", category: "饮料"),
-            Row(date: date(9, 22, 18), merchant: "ごちそう焼むすび おにまる 京都四条河原町店", payer: innei, amount: 1703, currency: "CNY", consumers: mine, note: "焼むすび，支付宝实付，原价 ¥399", method: "alipay", category: "餐饮", place: seedPlace("onimaru", "ごちそう焼むすび おにまる 京都四条河原町店", 35.0031, 135.7679, category: "餐饮")),
+            Row(date: date(9, 22, 18), merchant: "ごちそう焼むすび おにまる 京都四条河原町店", payer: innei, amount: 1703, currency: "CNY", consumers: mine, note: "焼むすび，支付宝实付", original: Money(minor: 399, currency: "JPY"), method: "alipay", category: "餐饮", place: seedPlace("onimaru", "ごちそう焼むすび おにまる 京都四条河原町店", 35.0031, 135.7679, category: "餐饮")),
             Row(date: date(9, 22, 18, 30), merchant: "Sanrio Gallery 京都店", payer: innei, amount: 1100, currency: "JPY", consumers: mine, note: "サンリオ グッズ，含税10%", category: "购物", place: seedPlace("sanrio-kyoto", "Sanrio Gallery 京都店", 35.0033, 135.7672, phone: "075-229-6955", category: "购物")),
         ]
 
         for row in shared + personal {
             let expense = try store.createExpense(ExpenseDraft(
                 ledgerId: ledger.id, merchant: row.merchant, note: row.note, category: row.category,
-                occurredAt: row.date, timeZone: tokyo.identifier, currency: row.currency,
+                occurredAt: row.date, endsAt: row.endsAt, timeZone: tokyo.identifier, currency: row.currency, original: row.original,
                 lines: [LineDraft(name: row.merchant, amountMinor: row.amount, consumers: row.consumers)],
                 payments: [PaymentDraft(row.payer.id, amountMinor: row.amount, method: row.method)]
             ))

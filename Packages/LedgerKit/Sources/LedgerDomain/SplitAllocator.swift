@@ -9,6 +9,8 @@ public enum DomainError: Error, Equatable, Sendable {
     case paymentsMismatch(expected: Int64, actual: Int64)
     case participantNotInLedger(UUID)
     case invalidAmount
+    case invalidDateRange
+    case sameParticipant
 }
 
 public struct LineAllocation: Hashable, Sendable {

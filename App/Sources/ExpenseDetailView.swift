@@ -86,6 +86,12 @@ struct ExpenseDetailView: View {
                     .foregroundStyle(.secondary)
                     .monospacedDigit()
             }
+            if let original = detail.expense.original {
+                Text("标价 \(original.formatted)")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .monospacedDigit()
+            }
             Text(occurredLabel(detail.expense))
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
@@ -95,9 +101,7 @@ struct ExpenseDetailView: View {
 
     private func occurredLabel(_ expense: Expense) -> String {
         let zone = TimeZone(identifier: expense.timeZone) ?? .current
-        var style = Date.FormatStyle(date: .abbreviated, time: .shortened)
-        style.timeZone = zone
-        let label = expense.occurredAt.formatted(style)
+        let label = ExpenseDates.label(expense.occurredAt, expense.endsAt, timeZone: zone)
         guard zone.secondsFromGMT(for: expense.occurredAt) != TimeZone.current.secondsFromGMT(for: expense.occurredAt) else { return label }
         return "\(label) · \(zone.localizedName(for: .shortGeneric, locale: .current) ?? zone.identifier)"
     }

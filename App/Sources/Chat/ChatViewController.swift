@@ -99,7 +99,7 @@ final class ChatViewController: UIViewController {
             cell.onHeightChange = { [weak self] in self?.relayoutStreamingCell() }
         }
         let proposal = UICollectionView.CellRegistration<UICollectionViewListCell, Message> { [unowned self] cell, _, message in
-            let preview = ProposalPreview.make(payload: message.payload, ledger: session.ledger, store: AppServices.store)
+            let preview = ProposalPreview.make(payload: message.payload, createdAt: message.createdAt, ledger: session.ledger, store: AppServices.store)
             let occurredAt = (try? preview.get())?.occurredAt ?? message.createdAt
             cell.contentConfiguration = UIHostingConfiguration {
                 ProposalCardView(

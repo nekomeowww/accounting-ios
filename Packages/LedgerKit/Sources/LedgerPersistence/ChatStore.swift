@@ -111,7 +111,7 @@ extension LedgerStore {
                 .fetchAll(db)
                 .map { (id: $0.id, name: $0.name) }
             let proposal = try ExpenseProposal.decode(payload)
-            let draft = try proposal.draft(ledgerId: ledgerId, participants: participants, timeZone: timeZone)
+            let draft = try proposal.draft(ledgerId: ledgerId, participants: participants, now: message.createdAt, timeZone: timeZone)
             var expense = try Self.insertExpense(db, draft, actorId: actorId)
             if let place {
                 let placeRow = try Self.upsertPlace(db, ledgerId: ledgerId, candidate: place)

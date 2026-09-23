@@ -47,6 +47,34 @@ import Testing
         #expect(abs(net[id]! - cents) < 100)
     }
     #expect(abs(settlement.rows.reduce(0) { $0 + $1.net.minor }) <= settlement.rows.count)
+
+    let stats = try store.writer.read { try LedgerStore.fetchStats($0, ledgerId: ledger.id) }
+    let inneiStats = try #require(stats.people.first { $0.participantId == innei.id })
+    #expect(inneiStats.personal.minor == 11610)
+    #expect(stats.people.first { $0.participantId == rizumu.id }?.personal.minor == 0)
+    let peopleTotal = stats.people.reduce(0) { $0 + $1.total.minor }
+    let categoryTotal = stats.categories.reduce(0) { $0 + $1.total.minor }
+    #expect(abs(peopleTotal - categoryTotal) < 100)
+
+    var transfers: [Transfer] = []
+    for planned in settlement.transfers {
+        transfers.append(try store.recordTransfer(ledgerId: ledger.id, from: planned.from, to: planned.to,
+                                                  amount: Money(minor: planned.minor, currency: "CNY")))
+    }
+    let settled = try store.writer.read { try LedgerStore.fetchSettlement($0, ledgerId: ledger.id) }
+    #expect(settled.rows.allSatisfy { abs($0.net.minor) <= settlement.rows.count })
+    #expect(settled.transfers.allSatisfy { $0.minor <= settlement.rows.count })
+    let activity = try store.writer.read { try LedgerStore.fetchActivity($0, ledgerId: ledger.id) }
+    #expect(activity.filter { $0.kind == .transfer }.count == transfers.count)
+    #expect(try store.writer.read { try LedgerStore.fetchStats($0, ledgerId: ledger.id) } == stats)
+
+    try store.deleteTransfer(id: transfers[0].id)
+    let reopened = try store.writer.read { try LedgerStore.fetchSettlement($0, ledgerId: ledger.id) }
+    let debtor = transfers[0].fromParticipantId
+    #expect(reopened.rows.first { $0.participantId == debtor }?.net == settlement.rows.first { $0.participantId == debtor }?.net)
+    #expect(throws: DomainError.sameParticipant) {
+        try store.recordTransfer(ledgerId: ledger.id, from: innei.id, to: innei.id, amount: Money(minor: 100, currency: "CNY"))
+    }
 }
 
 @Test func changingSettlementCurrencyClearsRates() throws {
