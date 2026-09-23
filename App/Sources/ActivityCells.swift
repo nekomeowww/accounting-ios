@@ -37,7 +37,7 @@ struct BalanceCardView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             if let mine {
-                Text(mine.net.minor >= 0 ? "你应收" : "你应付")
+                Text(mine.net.minor == 0 ? "你已两清" : mine.net.minor > 0 ? "你应收" : "你应付")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
                 Text(Money(minor: abs(mine.net.minor), currency: mine.net.currency).formatted)
@@ -49,15 +49,25 @@ struct BalanceCardView: View {
                     .font(.footnote)
                     .foregroundStyle(.orange)
             }
-            ForEach(others, id: \.self) { row in
-                HStack {
-                    Text(row.participantName)
-                    Spacer()
-                    Text(Money(minor: abs(row.net.minor), currency: row.net.currency).formatted)
-                        .monospacedDigit()
-                        .foregroundStyle(row.net.minor < 0 ? .orange : .green)
+            if settlement.transfers.isEmpty {
+                if !settlement.rows.isEmpty && settlement.missingRates.isEmpty {
+                    Label("已结清", systemImage: "checkmark.circle")
+                        .font(.subheadline)
+                        .foregroundStyle(.green)
                 }
-                .font(.subheadline)
+            } else {
+                Divider()
+                Text("结清方式")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                ForEach(settlement.transfers, id: \.self) { transfer in
+                    TransferRow(
+                        from: settlement.name(transfer.from),
+                        to: settlement.name(transfer.to),
+                        amount: Money(minor: transfer.minor, currency: settlement.currency),
+                        involvesMe: transfer.from == myParticipantId || transfer.to == myParticipantId
+                    )
+                }
             }
         }
         .padding(.vertical, 4)
@@ -66,9 +76,29 @@ struct BalanceCardView: View {
     private var mine: SettlementRow? {
         settlement.rows.first { $0.participantId == myParticipantId }
     }
+}
 
-    private var others: [SettlementRow] {
-        settlement.rows.filter { $0.participantId != myParticipantId && $0.net.minor != 0 }
+private struct TransferRow: View {
+    var from: String
+    var to: String
+    var amount: Money
+    var involvesMe: Bool
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Text(from)
+            Image(systemName: "arrow.right")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            Text(to)
+            Spacer()
+            Text(amount.formatted)
+                .monospacedDigit()
+        }
+        .font(.subheadline.weight(involvesMe ? .semibold : .regular))
+        .foregroundStyle(involvesMe ? .primary : .secondary)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("\(from) 转给 \(to) \(amount.formatted)")
     }
 }
 

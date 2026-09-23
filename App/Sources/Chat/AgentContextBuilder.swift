@@ -40,6 +40,12 @@ enum AgentContextBuilder {
         for row in settlement.rows {
             lines.append("- \(row.participantName): \(row.net.formatted)")
         }
+        if !settlement.transfers.isEmpty {
+            lines.append("建议的结清方式（转账次数最少）：")
+            for transfer in settlement.transfers {
+                lines.append("- \(settlement.name(transfer.from)) 转给 \(settlement.name(transfer.to)) \(Money(minor: transfer.minor, currency: settlement.currency).formatted)")
+            }
+        }
         if !settlement.missingRates.isEmpty {
             lines.append("注意：缺少 \(settlement.missingRates.joined(separator: "、")) 汇率，这些币种的金额未计入上面的余额。")
         }

@@ -51,6 +51,9 @@ struct DebugGalleryView: View {
             Section("正常") { BalanceCardView(settlement: f.settlement, myParticipantId: f.me) }
             Section("缺少汇率") { BalanceCardView(settlement: f.settlement.with { $0.missingRates = ["USD", "HKD"] }, myParticipantId: f.me) }
             Section("我应收") { BalanceCardView(settlement: f.settlement, myParticipantId: f.settlement.rows.max { $0.net.minor < $1.net.minor }?.participantId) }
+            Section("全部结清") {
+                BalanceCardView(settlement: f.settlement.with { s in s.rows = s.rows.map { row in var row = row; row.net.minor = 0; return row } }, myParticipantId: f.me)
+            }
             Section("空账本") { BalanceCardView(settlement: Settlement(currency: "CNY", rows: [], missingRates: []), myParticipantId: nil) }
         case .expenseRow:
             Section("多人 / 个人 / 外币") {

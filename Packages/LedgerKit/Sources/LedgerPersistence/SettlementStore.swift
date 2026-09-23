@@ -18,6 +18,14 @@ public struct Settlement: Hashable, Sendable {
         self.rows = rows
         self.missingRates = missingRates
     }
+
+    public var transfers: [PlannedTransfer] {
+        SettlementPlanner.plan(Dictionary(uniqueKeysWithValues: rows.map { ($0.participantId, $0.net.minor) }))
+    }
+
+    public func name(_ participantId: UUID) -> String {
+        rows.first { $0.participantId == participantId }?.participantName ?? ""
+    }
 }
 
 extension LedgerStore {
