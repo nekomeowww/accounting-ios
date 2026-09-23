@@ -22,6 +22,7 @@ public struct ExpenseProposal: Hashable, Sendable, Codable {
     public var currency: String
     public var payer: String
     public var consumers: [String]?
+    public var shares: [ExpenseProposalShare]?
     public var items: [ExpenseProposalItem]?
     public var occurredAt: String?
     public var endsAt: String?
@@ -32,7 +33,7 @@ public struct ExpenseProposal: Hashable, Sendable, Codable {
     public var place: PlaceHint?
 
     enum CodingKeys: String, CodingKey {
-        case merchant, amount, currency, payer, consumers, items, category, note, place
+        case merchant, amount, currency, payer, consumers, shares, items, category, note, place
         case occurredAt = "occurred_at"
         case endsAt = "ends_at"
         case originalAmount = "original_amount"
@@ -46,6 +47,7 @@ public struct ExpenseProposal: Hashable, Sendable, Codable {
         "currency":{"type":"string","description":"ISO 4217 币种代码，如 JPY、CNY、USD"},
         "payer":{"type":"string","description":"付款的成员名，必须是账本成员之一"},
         "consumers":{"type":"array","items":{"type":"string"},"description":"整笔或未单独指定分摊人的项目由这些成员平摊；省略表示全员"},
+        "shares":{"type":"array","minItems":1,"description":"按指定金额分摊（不均分）时填写，每人承担的金额之和必须等于 amount；与 items、consumers 互斥","items":{"type":"object","additionalProperties":false,"required":["member","amount"],"properties":{"member":{"type":"string","description":"成员名"},"amount":{"type":"string","description":"该成员承担的金额，原币主单位的十进制字符串"}}}},
         "items":{"type":"array","minItems":1,"description":"同一张账单的项目明细；逐项目分摊时填写，所有项目金额之和必须等于 amount。省略时按单项目记账","items":{"type":"object","additionalProperties":false,"required":["name","amount"],"properties":{"name":{"type":"string","description":"项目名称"},"amount":{"type":"string","description":"该项目金额，原币主单位的十进制字符串"},"consumers":{"type":"array","items":{"type":"string"},"description":"承担该项目的成员；省略时沿用顶层 consumers，再省略表示全员"}}}},
         "occurred_at":{"type":"string","description":"消费时间 yyyy-MM-ddTHH:mm（本地时间），省略表示现在"},
         "ends_at":{"type":"string","description":"跨天消费（住宿、租车）的结束时间 yyyy-MM-ddTHH:mm，如入住 9/15 退房 9/18；普通消费省略"},
@@ -80,18 +82,8 @@ public struct ExpenseProposal: Hashable, Sendable, Codable {
         let code = currency.trimmingCharacters(in: .whitespaces).uppercased()
         guard code.count == 3 else { throw ProposalError.invalidCurrency(currency) }
         func minorUnits(_ text: String, in currencyCode: String? = nil) throws -> Int64 {
-            let code = currencyCode ?? code
-            let trimmed = text.trimmingCharacters(in: .whitespaces)
-            guard trimmed.range(of: #"^[0-9]+(?:\.[0-9]+)?$"#, options: .regularExpression) != nil,
-                  let major = Decimal(string: trimmed, locale: Locale(identifier: "en_US_POSIX")) else {
-                throw ProposalError.invalidAmount(text)
-            }
-            let scaled = major * pow(10, Currency.exponent(for: code))
-            var rounded = Decimal()
-            var copy = scaled
-            NSDecimalRound(&rounded, &copy, 0, .plain)
-            guard rounded == scaled, rounded > 0, rounded <= Decimal(Int64.max) else { throw ProposalError.invalidAmount(text) }
-            return NSDecimalNumber(decimal: rounded).int64Value
+            guard let money = Money(parsing: text, currency: currencyCode ?? code) else { throw ProposalError.invalidAmount(text) }
+            return money.minor
         }
         let minor = try minorUnits(amount)
 
@@ -118,6 +110,16 @@ public struct ExpenseProposal: Hashable, Sendable, Codable {
                                      consumers: consumerIds(item.consumers ?? consumers).map { ConsumerDraft($0) })
             }
             guard total == minor else { throw ProposalError.itemTotalMismatch }
+        } else if let shares {
+            guard !shares.isEmpty else { throw ProposalError.emptyItems }
+            var seen = Set<UUID>()
+            let exact = try shares.map { share -> ConsumerDraft in
+                let id = try resolve(share.member)
+                guard seen.insert(id).inserted else { throw ProposalError.shareTotalMismatch }
+                return ConsumerDraft(id, exactMinor: try minorUnits(share.amount))
+            }
+            guard exact.reduce(Int64(0), { $0 + ($1.exactMinor ?? 0) }) == minor else { throw ProposalError.shareTotalMismatch }
+            lines = [LineDraft(name: merchant, amountMinor: minor, splitRule: .exact, consumers: exact)]
         } else {
             lines = [try LineDraft(name: merchant, amountMinor: minor,
                                    consumers: consumerIds(consumers).map { ConsumerDraft($0) })]
@@ -149,6 +151,11 @@ public struct ExpenseProposal: Hashable, Sendable, Codable {
     }
 }
 
+public struct ExpenseProposalShare: Hashable, Sendable, Codable {
+    public var member: String
+    public var amount: String
+}
+
 public struct ExpenseProposalItem: Hashable, Sendable, Codable {
     public var name: String
     public var amount: String
@@ -164,6 +171,7 @@ public enum ProposalError: Error, Equatable, Sendable, LocalizedError {
     case emptyItems
     case emptyItemName
     case itemTotalMismatch
+    case shareTotalMismatch
     case notPending
 
     public var errorDescription: String? {
@@ -176,6 +184,7 @@ public enum ProposalError: Error, Equatable, Sendable, LocalizedError {
         case .emptyItems: "账单项目不能为空"
         case .emptyItemName: "项目名称不能为空"
         case .itemTotalMismatch: "项目金额合计与账单总额不符"
+        case .shareTotalMismatch: "每人金额合计与账单总额不符，或成员重复"
         case .notPending: "这张卡片已处理"
         }
     }

@@ -36,14 +36,19 @@ final class ActivityViewController: UIViewController {
         super.init(nibName: nil, bundle: nil)
         navigationItem.largeTitleDisplayMode = .never
         navigationItem.subtitle = ledger.name
-        navigationItem.rightBarButtonItem = UIBarButtonItem(image: UIImage(systemName: "ellipsis"), menu: UIMenu(children: [
+        let add = UIBarButtonItem(systemItem: .add, primaryAction: UIAction { [weak self] _ in
+            guard let self else { return }
+            ExpenseForm.present(from: self, ledger: ledger)
+        })
+        add.accessibilityLabel = "记一笔"
+        navigationItem.rightBarButtonItems = [UIBarButtonItem(image: UIImage(systemName: "ellipsis"), menu: UIMenu(children: [
             UIAction(title: "统计", image: UIImage(systemName: "chart.pie")) { [weak self] _ in
                 self?.navigationController?.pushViewController(LedgerStatsViewController(ledgerId: ledger.id), animated: true)
             },
             UIAction(title: "账本设置", image: UIImage(systemName: "gearshape")) { [weak self] _ in
                 self?.navigationController?.pushViewController(LedgerSettingsViewController(ledgerId: ledger.id), animated: true)
             },
-        ]))
+        ])), add]
     }
 
     @available(*, unavailable)

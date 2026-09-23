@@ -151,9 +151,16 @@ private struct AmountRow: View {
 final class ExpenseDetailViewController: UIHostingController<ExpenseDetailView> {
     private var observation: AnyDatabaseCancellable?
 
+    private let expenseId: UUID
+
     init(expenseId: UUID, myParticipantId: UUID?) {
+        self.expenseId = expenseId
         super.init(rootView: ExpenseDetailView(detail: nil, myParticipantId: myParticipantId))
         navigationItem.largeTitleDisplayMode = .never
+        navigationItem.rightBarButtonItem = UIBarButtonItem(image: UIImage(systemName: "ellipsis"), menu: UIMenu(children: [
+            UIAction(title: "编辑", image: UIImage(systemName: "pencil")) { [weak self] _ in self?.edit() },
+            UIAction(title: "删除", image: UIImage(systemName: "trash"), attributes: .destructive) { [weak self] _ in self?.confirmDelete() },
+        ]))
         rootView.onOpenMap = { [weak self] placeId in self?.openMap(placeId: placeId) }
         let store = AppServices.store
         observation = store.observeExpenseDetail(expenseId: expenseId).start(in: store.writer, scheduling: .immediate, onError: { _ in }) { [weak self] detail in
@@ -163,6 +170,47 @@ final class ExpenseDetailViewController: UIHostingController<ExpenseDetailView> 
 
     @available(*, unavailable)
     required init?(coder: NSCoder) { nil }
+
+    private var ledger: Ledger? {
+        guard let ledgerId = rootView.detail?.expense.ledgerId else { return nil }
+        return try? AppServices.store.writer.read { try Ledger.fetchOne($0, key: ledgerId.uuidString) }
+    }
+
+    private func edit() {
+        guard let ledger else { return }
+        let id = expenseId
+        ExpenseForm.present(from: self, ledger: ledger, expenseId: id) { [weak self] previous in
+            guard let self, let previous else { return }
+            UndoToast.show(in: view, message: "已修改") {
+                let current = try AppServices.store.editableExpense(id: id)
+                try AppServices.store.updateExpense(id: id, previous.draft, expectedVersion: current.version)
+            }
+        }
+    }
+
+    private func confirmDelete() {
+        guard let merchant = rootView.detail?.expense.merchant else { return }
+        let alert = UIAlertController(title: "删除「\(merchant)」？", message: "余额会随之更新。", preferredStyle: .actionSheet)
+        alert.addAction(UIAlertAction(title: "删除", style: .destructive) { [weak self] _ in
+            guard let self else { return }
+            let id = expenseId
+            do {
+                try AppServices.store.deleteExpense(id: id)
+            } catch {
+                let failure = UIAlertController(title: "删除失败", message: error.localizedDescription, preferredStyle: .alert)
+                failure.addAction(UIAlertAction(title: "好", style: .default))
+                present(failure, animated: true)
+                return
+            }
+            let container = navigationController?.view ?? view!
+            navigationController?.popViewController(animated: true)
+            UndoToast.show(in: container, message: "已删除「\(merchant)」") {
+                try AppServices.store.restoreExpense(id: id)
+            }
+        })
+        alert.addAction(UIAlertAction(title: "取消", style: .cancel))
+        present(alert, animated: true)
+    }
 
     private func openMap(placeId: UUID) {
         guard let ledgerId = rootView.detail?.expense.ledgerId else { return }

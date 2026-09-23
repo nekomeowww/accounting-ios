@@ -28,6 +28,21 @@ public enum Currency {
 }
 
 extension Money {
+    public init?(parsing text: String, currency: String) {
+        let trimmed = text.trimmingCharacters(in: .whitespaces)
+        guard trimmed.range(of: #"^[0-9]+(?:\.[0-9]+)?$"#, options: .regularExpression) != nil,
+              let major = Decimal(string: trimmed, locale: Locale(identifier: "en_US_POSIX")) else { return nil }
+        var scaled = major * pow(10, Currency.exponent(for: currency))
+        var rounded = Decimal()
+        NSDecimalRound(&rounded, &scaled, 0, .plain)
+        guard rounded == scaled, rounded > 0, rounded <= Decimal(Int64.max) else { return nil }
+        self.init(minor: NSDecimalNumber(decimal: rounded).int64Value, currency: currency)
+    }
+
+    public var plainText: String {
+        decimal.formatted(.number.precision(.fractionLength(0...exponent)).grouping(.never).locale(Locale(identifier: "en_US_POSIX")))
+    }
+
     public func converted(to target: String, rate: Decimal) -> Money {
         var value = decimal * rate * pow(10, Currency.exponent(for: target))
         var rounded = Decimal()

@@ -13,7 +13,7 @@
 - [x] 确认先做本地持久化 / 本地计算，CRDT、同步实验和服务器后置。
 - [x] 本地存储实现按 SQLite + GRDB 建议完成技术定稿（[本地数据模型 Spec](../superpowers/specs/2026-09-23-local-schema-design.md)）。
 - [x] 币种：账本结算币种 + 手动汇率统一折算，按钮手动拉取（[结算币种 Spec](../superpowers/specs/2026-09-23-settlement-currency-design.md)）。
-- [ ] 确认 Exact Split、结算记录、退款与债务展示语义。
+- [x] 确认 Exact Split、结算记录、退款与债务展示语义（技术 Spec D2 / D3 / D5）。
 - [x] AI provider：BYOK，Anthropic + OpenAI 兼容（[Agent Chat Spec](../superpowers/specs/2026-09-23-agent-chat-design.md)）；测试票据来源：`~/trips` 真实旅行账本。
 - [ ] 评审 Receipt 独立修订、字段证据、金额组成 / 支付 / 汇总，以及映射到现有 expenseLine / journal 的设计。
 
@@ -33,10 +33,10 @@
 - [x] 按已定稿模型完成 Money、Participant / Member、ExpenseLine / LineConsumer / ExpensePayment 与 Journal 的实现和验证。
 - [ ] 数据迁移、事务边界、查询观察、UUID、软删除与 Action Log。
 - [ ] 区分 MemberID、ActorID 与设备上的当前成员偏好，业务实体不依赖云端账号。
-- [ ] 创建账本 / 成员，手工创建和修改 Expense，均分、请客、个人消费。
-- [ ] 按 D2 决议加入 Exact Split。
+- [x] 手工创建、修改、删除 Expense（均分、请客、个人消费；版本校验；删除/修改可撤销）。多项目账单的金额与分摊暂只能通过 Agent 修改；创建账本 / 成员 UI 待做。
+- [x] 按 D2 决议加入 Exact Split（手工表单「指定金额」+ Agent 卡片 shares）。
 - [x] Balance Engine：按币种 journal 净额 → 结算币种折算；golden test 对齐 trips 表格。
-- [ ] 债务展示（谁转给谁）；按 D3 决议安排结算记录。
+- [x] 债务展示（谁转给谁）与结算记录：点「结清方式」记录还款，计入余额，可左滑删除。
 - [ ] 持久化 Undo 与命令幂等；修改目标的版本校验。
 - [ ] 完成领域不变量、事务失败和重启恢复验证。
 

@@ -85,3 +85,14 @@ private let tokyo = TimeZone(identifier: "Asia/Tokyo")!
             .draft(ledgerId: ledger, participants: members)
     }
 }
+
+@Test func proposalSplitsByExactShares() throws {
+    let draft = try ExpenseProposal.decode(#"{"merchant":"晚餐","amount":"2000","currency":"JPY","payer":"innei","shares":[{"member":"neko","amount":"1200"},{"member":"innei","amount":"800"}]}"#)
+        .draft(ledgerId: ledger, participants: members)
+    #expect(draft.lines[0].splitRule == .exact)
+    #expect(draft.lines[0].consumers.map(\.exactMinor) == [1200, 800])
+    #expect(throws: ProposalError.shareTotalMismatch) {
+        try ExpenseProposal.decode(#"{"merchant":"x","amount":"2000","currency":"JPY","payer":"innei","shares":[{"member":"neko","amount":"1000"}]}"#)
+            .draft(ledgerId: ledger, participants: members)
+    }
+}

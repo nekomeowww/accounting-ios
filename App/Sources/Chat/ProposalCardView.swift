@@ -8,6 +8,7 @@ struct ProposalPreview {
         var name: String
         var amount: Money
         var consumers: [String]
+        var exact = false
     }
 
     var merchant: String
@@ -29,7 +30,12 @@ struct ProposalPreview {
             let total = Money(minor: draft.totalMinor, currency: draft.currency)
             let lines = draft.lines.map { line in
                 Line(name: line.name, amount: Money(minor: line.amountMinor, currency: draft.currency),
-                     consumers: line.consumers.compactMap { names[$0.participantId] })
+                     consumers: line.consumers.compactMap { consumer in
+                         names[consumer.participantId].map { name in
+                             consumer.exactMinor.map { "\(name) \(Money(minor: $0, currency: draft.currency).formatted)" } ?? name
+                         }
+                     },
+                     exact: line.splitRule == .exact)
             }
             let (settlement, rate) = try store.writer.read { db in
                 let settlement = try Ledger.fetchOne(db, key: ledger.id.uuidString)?.settlementCurrency ?? ledger.settlementCurrency
@@ -109,7 +115,7 @@ struct ProposalCardView: View {
             Grid(alignment: .leading, horizontalSpacing: 12, verticalSpacing: 4) {
                 row("付款", preview.payer)
                 if preview.lines.count == 1, let line = preview.lines.first {
-                    row("分摊", splitLabel(line.consumers))
+                    row("分摊", splitLabel(line))
                 }
                 row("时间", ExpenseDates.label(preview.occurredAt, preview.endsAt))
                 if let original = preview.original { row("标价", original.formatted) }
@@ -128,7 +134,7 @@ struct ProposalCardView: View {
                                 Spacer()
                                 Text(line.amount.formatted).monospacedDigit()
                             }
-                            Text("分摊：\(splitLabel(line.consumers))")
+                            Text("分摊：\(splitLabel(line))")
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                         }
@@ -139,8 +145,10 @@ struct ProposalCardView: View {
         }
     }
 
-    private func splitLabel(_ consumers: [String]) -> String {
-        consumers.count == 1 ? "\(consumers[0]) 个人" : "\(consumers.joined(separator: "、"))（\(consumers.count) 人均分）"
+    private func splitLabel(_ line: ProposalPreview.Line) -> String {
+        let consumers = line.consumers
+        if line.exact { return consumers.joined(separator: "、") }
+        return consumers.count == 1 ? "\(consumers[0]) 个人" : "\(consumers.joined(separator: "、"))（\(consumers.count) 人均分）"
     }
 
     @ViewBuilder
