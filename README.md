@@ -26,7 +26,7 @@ xcodebuild -project Accounting.xcodeproj -scheme Accounting -destination 'platfo
 xcodebuild -project Accounting.xcodeproj -scheme Accounting -destination 'platform=iOS Simulator,name=iPhone 17 Pro' test
 ```
 
-- `App/`：App target（`dev.innei.Accounting`，iOS 26.0+，iPhone only，Swift 6）
+- `App/`：App target（`dev.innei.musubicho`，iOS 26.0+，iPhone only，Swift 6）
 - `Packages/LedgerKit/`：本地 Swift Package，当前只有 `LedgerDomain`
 
 - [产品 Spec v0.2](docs/product/product-spec-v0.2.md)

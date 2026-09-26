@@ -20,12 +20,12 @@ xcodebuild -project Accounting.xcodeproj -scheme Accounting -destination "$DEST"
 
 xcrun simctl boot "iPhone 17 Pro" 2>/dev/null; xcrun simctl bootstatus "iPhone 17 Pro" -b
 UDID=$(xcrun simctl list devices booted -j | python3 -c "import json,sys; print([d['udid'] for v in json.load(sys.stdin)['devices'].values() for d in v if d['state']=='Booted'][0])")
-xcrun simctl terminate booted dev.innei.Accounting 2>/dev/null
-xcrun simctl uninstall booted dev.innei.Accounting  # only when you need a fresh DB (Debug seed runs on empty DB)
+xcrun simctl terminate booted dev.innei.musubicho 2>/dev/null
+xcrun simctl uninstall booted dev.innei.musubicho  # only when you need a fresh DB (Debug seed runs on empty DB)
 xcrun simctl install booted DerivedData/Build/Products/Debug-iphonesimulator/Accounting.app
-xcrun simctl launch booted dev.innei.Accounting
+xcrun simctl launch booted dev.innei.musubicho
 # chat page with a real provider (Debug only, no Keychain needed):
-SIMCTL_CHILD_AGENT_PROVIDER=openai SIMCTL_CHILD_AGENT_BASE_URL="$OPENAI_PROXY_URL" SIMCTL_CHILD_AGENT_MODEL=gpt-4o-mini SIMCTL_CHILD_AGENT_API_KEY="$OPENAI_API_KEY" xcrun simctl launch booted dev.innei.Accounting
+SIMCTL_CHILD_AGENT_PROVIDER=openai SIMCTL_CHILD_AGENT_BASE_URL="$OPENAI_PROXY_URL" SIMCTL_CHILD_AGENT_MODEL=gpt-4o-mini SIMCTL_CHILD_AGENT_API_KEY="$OPENAI_API_KEY" xcrun simctl launch booted dev.innei.musubicho
 open -a Simulator                                   # only if the user wants to watch; screenshots work without it
 
 axe describe-ui --udid $UDID | grep '"AXLabel" : "'   # confirm you are on the ledger list and read labels
@@ -39,8 +39,8 @@ xcrun simctl io booted screenshot "$S/activity.png" 2>/dev/null   # then Read th
 ## Debug page (Debug builds only)
 
 ```bash
-xcrun simctl launch booted dev.innei.Accounting -debug-open                    # land on the Debug page
-xcrun simctl launch booted dev.innei.Accounting -debug-open gallery-proposal   # jump straight to one row
+xcrun simctl launch booted dev.innei.musubicho -debug-open                    # land on the Debug page
+xcrun simctl launch booted dev.innei.musubicho -debug-open gallery-proposal   # jump straight to one row
 axe tap --id debug-open --udid $UDID                                           # ladybug button on the ledger list
 ```
 
@@ -62,4 +62,4 @@ Composer send button has no accessibility label: tap `-x 361 -y 807`; focus the 
 | App crashed | `ls -t ~/Library/Logs/DiagnosticReports/Accounting-*.ips \| head -1`, read `faultingThread` frames from the JSON body. |
 | Build says `'v26' is unavailable` | Package platforms use `.iOS("26.0")`, not `.v26`. |
 
-Seed data lives in `App/Sources/DebugSeed.swift`; bundle id `dev.innei.Accounting`; DB at the app's Application Support `ledger.sqlite`.
+Seed data lives in `App/Sources/DebugSeed.swift`; bundle id `dev.innei.musubicho`; DB at the app's Application Support `ledger.sqlite`.
