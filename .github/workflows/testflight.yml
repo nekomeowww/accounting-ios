@@ -18,7 +18,7 @@ permissions:
   contents: read
 
 env:
-  APPLE_TEAM_ID: KAMM5N88X3
+  APPLE_TEAM_ID: 433DLLA855
   BUNDLE_ID: dev.innei.musubicho
   ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
   ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
